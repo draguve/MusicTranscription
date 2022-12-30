@@ -61,7 +61,7 @@ for(let i=0;i<datas.length;i++){
     }
 }
 
-fs.writeFile("links.json", JSON.stringify(all_data), function(err) {
+fs.writeFile("links.json",JSON.stringify(all_data,null,2), function(err) {
     if (err) {
         console.log(err);
     }
