@@ -41,7 +41,7 @@ for item in contents:
                 case "drive.google.com":
                     if "folders" in item["file_pc_link"]:
                         os.makedirs(download_location)
-                        gdown.download_folder(item['file_pc_link'],output=download_location, quiet=False)
+                        gdown.download_folder(item['file_pc_link'], output=download_location, quiet=False)
                     else:
                         os.makedirs(download_location)
                         downloaded_file = gdown.download(url=item['file_pc_link'], quiet=False, fuzzy=True)
@@ -50,25 +50,41 @@ for item in contents:
                     os.makedirs(download_location)
                     headers = {'user-agent': 'Wget/1.16 (linux-gnu)'}
                     r = requests.get(item['file_pc_link'].replace("dl=0", "dl=1"), stream=True, headers=headers)
-                    to_download = download_location + f"{item['title'].replace(' ','')}_{item['album'].replace(' ','')}.psarc"
+                    to_download = download_location + f"{item['title'].replace(' ', '')}_{item['album'].replace(' ', '')}.psarc"
                     with open(to_download, 'w+b') as f:
                         for chunk in r.iter_content(chunk_size=1024):
                             if chunk:
                                 f.write(chunk)
-                    #check if size is more than 1MB
+                    # check if size is more than 1MB
                     if os.path.getsize(to_download) < 1000000:
-                        print(f'could not download from {item["file_pc_link"]} file size too low {os.path.getsize(to_download)}')
+                        print(
+                            f'could not download from {item["file_pc_link"]} file size too low {os.path.getsize(to_download)}')
                         shutil.rmtree(download_location)
                     else:
                         print(f"Downloaded from {item['file_pc_link']}")
                 case "www.mediafire.com":
                     os.makedirs(download_location)
-                    MediafireDL.Download(item['file_pc_link'],download_location[:-1])
+                    if isinstance(MediafireDL.Download(item['file_pc_link'], download_location[:-1],print_error=False), Exception):
+                        # fallback download script
+                        r = requests.get(item['file_pc_link'], stream=True, headers=headers)
+                        to_download = download_location + f"{item['title'].replace(' ', '')}_{item['album'].replace(' ', '')}.psarc"
+                        with open(to_download, 'w+b') as f:
+                            for chunk in r.iter_content(chunk_size=1024):
+                                if chunk:
+                                    f.write(chunk)
+                        if os.path.getsize(to_download) < 1000000:
+                            print(
+                                f'could not download from {item["file_pc_link"]} file size too low {os.path.getsize(to_download)}')
+                            shutil.rmtree(download_location)
+                        else:
+                            print(f"Downloaded from {item['file_pc_link']}")
                 case other:
-                    raise Exception(f"No handler")
+                    print(f"no handler could not download {item['file_pc_link']}")
+                    continue
+                    # raise Exception(f"No handler")
         except Exception as inst:
             print(f"{inst} could not download {item['file_pc_link']}")
-            # traceback.print_exc()
+            traceback.print_exc()
             if Path(download_location).exists():
                 shutil.rmtree(download_location)
             # try:
@@ -81,7 +97,7 @@ for item in contents:
             if Path(download_location).exists():
                 dir_check = os.listdir(download_location)
                 if len(dir_check) == 0:
-                    print("Empty directory")
+                    print(f"Empty directory {item['file_pc_link']}")
                     shutil.rmtree(download_location)
 
 pprint(possible_hosts)
