@@ -9,9 +9,29 @@ import requests
 import traceback
 from mediafiredl import MediafireDL
 from joblib import Parallel, delayed
+import string
+import random
+import unicodedata
+import re
 
-with open('links_all.json', 'r', encoding="utf8") as j:
-    contents = json.loads(j.read())
+def slugify(value, allow_unicode=False):
+    """
+    Taken from https://github.com/django/django/blob/master/django/utils/text.py
+    Convert to ASCII if 'allow_unicode' is False. Convert spaces or repeated
+    dashes to single dashes. Remove characters that aren't alphanumerics,
+    underscores, or hyphens. Convert to lowercase. Also strip leading and
+    trailing whitespace, dashes, and underscores.
+    """
+    value = str(value)
+    if allow_unicode:
+        value = unicodedata.normalize('NFKC', value)
+    else:
+        value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore').decode('ascii')
+    value = re.sub(r'[^\w\s-]', '', value.lower())
+    return re.sub(r'[-\s]+', '-', value).strip('-_')
+
+def get_random(size=6, chars=string.ascii_uppercase + string.digits):
+    return ''.join(random.choice(chars) for _ in range(size))
 
 def download_item(item):
     download_url = urlparse(item["file_pc_link"])
@@ -44,7 +64,7 @@ def download_item(item):
                 os.makedirs(download_location)
                 headers = {'user-agent': 'Wget/1.16 (linux-gnu)'}
                 r = requests.get(item['file_pc_link'].replace("dl=0", "dl=1"), stream=True, headers=headers)
-                to_download = download_location + f"{item['title'].replace(' ', '')}_{item['album'].replace(' ', '')}.psarc"
+                to_download = download_location + slugify(f"{item['title'].replace(' ', '')}_{item['album'].replace(' ', '')}_{get_random()}.psarc")
                 with open(to_download, 'w+b') as f:
                     for chunk in r.iter_content(chunk_size=1024):
                         if chunk:
@@ -62,7 +82,8 @@ def download_item(item):
                     # fallback download script
                     headers = {'user-agent': 'Wget/1.16 (linux-gnu)'}
                     r = requests.get(item['file_pc_link'], stream=True, headers=headers)
-                    to_download = download_location + f"{item['title'].replace(' ', '')}_{item['album'].replace(' ', '')}.psarc"
+                    filename = slugify(f"{item['title'].replace(' ', '')}_{item['album'].replace(' ', '')}_{get_random()}.psarc")
+                    to_download = download_location + filename
                     with open(to_download, 'w+b') as f:
                         for chunk in r.iter_content(chunk_size=1024):
                             if chunk:
@@ -95,18 +116,23 @@ def download_item(item):
                 print(f"Empty directory {item['file_pc_link']}")
                 shutil.rmtree(download_location)
 
-possible_hosts = {}
-delayed_funcs = []
-print(len(contents))
-for item in contents:
-    if "file_pc_link" in item and item["file_pc_link"] != "":
-        download_url = urlparse(item["file_pc_link"])
-        if download_url.hostname not in possible_hosts:
-            possible_hosts[download_url.hostname] = 0
-        possible_hosts[download_url.hostname] += 1
-        delayed_funcs.append(delayed(download_item)(item))
 
-parallel_pool = Parallel(n_jobs=6,verbose=True)
-parallel_pool(delayed_funcs)
 
-pprint(possible_hosts)
+with open('links_all.json', 'r', encoding="utf8") as j:
+    contents = json.loads(j.read())
+
+    possible_hosts = {}
+    delayed_funcs = []
+    print(len(contents))
+    for item in contents:
+        if "file_pc_link" in item and item["file_pc_link"] != "":
+            download_url = urlparse(item["file_pc_link"])
+            if download_url.hostname not in possible_hosts:
+                possible_hosts[download_url.hostname] = 0
+            possible_hosts[download_url.hostname] += 1
+            delayed_funcs.append(delayed(download_item)(item))
+
+    parallel_pool = Parallel(n_jobs=6,verbose=True)
+    parallel_pool(delayed_funcs)
+
+    pprint(possible_hosts)
