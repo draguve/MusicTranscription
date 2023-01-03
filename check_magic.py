@@ -31,13 +31,19 @@ def process_file(filename, root):
             # print(f"Need to rename {filename}")
             os.rename(filename, filename + ".psarc")
         elif file_magic == "Zip archive data, at least v2.0 to extract":
-            with ZipFile(filename, 'r') as zObject:
-                zObject.extractall(path=root)
-            os.remove(filename)
+            try:
+                with ZipFile(filename, 'r') as zObject:
+                    zObject.extractall(path=root)
+                os.remove(filename)
+            except Exception as e:
+                print(f"Could not process {e} {filename}")
         elif file_magic == "Zip archive data, at least v1.0 to extract":
-            with ZipFile(filename, 'r') as zObject:
-                zObject.extractall(path=root)
-            os.remove(filename)
+            try:
+                with ZipFile(filename, 'r') as zObject:
+                    zObject.extractall(path=root)
+                os.remove(filename)
+            except Exception as e:
+                print(f"Could not process {e} {filename}")
         elif file_magic == "data":
             os.remove(filename)
         elif file_magic == "PDF document, version 1.3":
