@@ -24,6 +24,7 @@ class EventVariable:
         return round(remap(self.eventStartRange, self.eventEndRange, 0, self.numberOfTokens - 1, value))
 
     def decode(self, value):
+        # TODO: search tree can be used here to decode
         assert 0 <= value <= self.numberOfTokens - 1
         new_value = remap(0, self.numberOfTokens - 1, self.eventStartRange, self.eventEndRange, value)
         return round(new_value) if self.roundAtEnd else new_value
@@ -59,7 +60,7 @@ class Event:
             value += self.subEvents[i].encode(data[i]) * self._weights[i]
         return value
 
-    def decode(self, value):
+    def decode(self, value) -> list:
         assert 0 <= value < self.numberOfTokens
         data = []
         remaining = value
