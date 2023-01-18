@@ -72,7 +72,7 @@ class Event:
 
 
 def generateTimeRange(numOfSeconds, timeStepsPerSecond):
-    return EventVariable("time", 0, numOfSeconds, 1 / timeStepsPerSecond)
+    return EventVariable("time", 0, numOfSeconds, 1 / timeStepsPerSecond,False)
 
 
 if __name__ == '__main__':

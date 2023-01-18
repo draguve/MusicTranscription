@@ -21,14 +21,14 @@ class Encoder:
             current += event.numberOfTokens
         self._numberOfTokens = current
 
-    def encode(self, eventName, data):
+    def encode(self, eventName, data,string=-1):
         assert eventName in self._handlers
         eventOffset = self._nameToLocation[eventName]
         eventIndex = self._handlers[eventName].encode(data)
         return eventOffset + eventIndex
 
     def decode(self, value):
-        handlerIndex = bisect_right(dataEncoder._locations, value) - 1
+        handlerIndex = bisect_right(self._locations, value) - 1
         handler = self.events[handlerIndex]
         eventOffset = self._locations[handlerIndex]
         return handler.eventName, handler.decode(value - eventOffset)

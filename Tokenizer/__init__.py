@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from dataclasses import dataclass
 import sortedcontainers
+from pprint import pprint
 
 
 def mergeDicts(dict1, dict2):
@@ -68,13 +69,6 @@ def parse_xml_file(xml_path):
         return xml_data
 
 
-@dataclass
-class SongSection:
-    startSeconds: float
-    durationSeconds: float
-    tokens: list[int]
-
-
 noteStartEventHandler = Event(
     "noteStart",
     [
@@ -97,7 +91,7 @@ noteStartEventHandler = Event(
 def createNoteStartEvent(string: int, fret: int, palm_mute: bool, hammer_on: bool, harmonic: bool, accent: bool,
                          tap: bool):
     return "noteStart", [string, fret, 1 if palm_mute else 0, 1 if hammer_on else 0, 1 if harmonic else 0,
-                         1 if accent else 0, 1 if tap else 0]
+                         1 if accent else 0, 1 if tap else 0], string
 
 
 noteEndEventHandler = Event(
@@ -112,7 +106,7 @@ noteEndEventHandler = Event(
 
 
 def createNoteEndEvent(string: int, fret: int, pull_off: bool, unpitched_slide: bool):
-    return "noteEnd", [string, fret, 1 if pull_off else 0, 1 if unpitched_slide else 0]
+    return "noteEnd", [string, fret, 1 if pull_off else 0, 1 if unpitched_slide else 0], string
 
 
 noteBendEventHandler = Event(
@@ -126,7 +120,7 @@ noteBendEventHandler = Event(
 
 
 def createNoteBendEvent(string: int, semi_tone: float, tap: bool, ):
-    return "bend", [string, semi_tone, 1 if tap else 0]
+    return "bend", [string, semi_tone, 1 if tap else 0], string
 
 
 endOfTieEventHandler = Event(
@@ -153,14 +147,28 @@ def createEndOfSeqEvent():
     return "eos", [0]
 
 
+def createTimeEvent(time):
+    return "time", [time]
+
+
+@dataclass
+class SongSection:
+    startSeconds: float
+    stopSeconds: float
+    tokens: list[int]
+
+
 class GuitarTokenizer:
     def __init__(self, numberOfSeconds, timeStepsPerSecond):
+        self._numberOfSeconds = numberOfSeconds
+        self._timeStepsPerSecond = timeStepsPerSecond
         self.minTimeForNotes = 1 / timeStepsPerSecond
+        self._timeEventHandler = Event(
+            "time",
+            [generateTimeRange(numberOfSeconds, timeStepsPerSecond)]
+        )
         self._encoder = Encoder([
-            Event(
-                "time",
-                [generateTimeRange(numberOfSeconds, timeStepsPerSecond)]
-            ),
+            self._timeEventHandler,
             noteStartEventHandler,
             noteEndEventHandler,
             noteBendEventHandler,
@@ -172,10 +180,10 @@ class GuitarTokenizer:
         note: dict = n
         noteTime = float(note["time"])
         if not noteTime in sortedEvents:
-            sortedEvents[noteTime] = []
+            sortedEvents[noteTime] = {"start": [], "end": [], "bend": []}
 
         # create start note
-        sortedEvents[noteTime].append(
+        sortedEvents[noteTime]["start"].append(
             createNoteStartEvent(
                 string=int(note["string"]),
                 fret=int(note["fret"]),
@@ -191,9 +199,9 @@ class GuitarTokenizer:
         noteEndFret = int(note["slideUnpitchTo"]) if "slideUnpitchTo" in note else noteEndFret
 
         if not noteEndTime in sortedEvents:
-            sortedEvents[noteEndTime] = []
+            sortedEvents[noteEndTime] = {"start": [], "end": [], "bend": []}
 
-        sortedEvents[noteEndTime].append(
+        sortedEvents[noteEndTime]["end"].append(
             createNoteEndEvent(
                 string=int(note["string"]),
                 fret=noteEndFret,
@@ -208,9 +216,9 @@ class GuitarTokenizer:
                 bendTime = float(bendValue["time"])
 
                 if not bendTime in sortedEvents:
-                    sortedEvents[bendTime] = []
+                    sortedEvents[bendTime] = {"start": [], "end": [], "bend": []}
 
-                sortedEvents[bendTime].append(
+                sortedEvents[bendTime]["bend"].append(
                     createNoteBendEvent(
                         string=int(note["string"]),
                         semi_tone=float(bendValue["step"]) if "step" in bendValue else 0.0,
@@ -252,12 +260,55 @@ class GuitarTokenizer:
         for c in loadedFile["chords"]:
             self.processAndAddChords(sortedEvents, c, loadedFile["chordTemplates"])
 
-        # TODO: need to add time events and tie events
-        for key in sortedEvents.keys():
-            for event in sortedEvents[key]:
-                print(key, event, self._encoder.encode(event[0], event[1]))
-            # print(key, sortedEvents[key])
+        sections = []
+        queue = list(sortedEvents.keys())
+        lastOpenNotes = [None] * 6
+        while len(queue) > 0:
+            startTime = queue.pop(0)
+            stopTime = startTime + self._numberOfSeconds
+            thisTimeStep = [startTime]
+            while len(queue) > 0 and queue[0] <= stopTime:
+                thisTimeStep.append(queue.pop(0))
 
+            tokens = []
+            writtenTieTime = False
+            # TODO : check ties are created properly something feels off, THERE IS A BUG HERE FIX IT
+            # restart all notes in tie
+            for noteData in lastOpenNotes:
+                if noteData is not None:
+                    if not writtenTieTime:
+                        tokens.append(self._encoder.encode(*createTimeEvent(0)))
+                        writtenTieTime = True
+                    tokens.append(self._encoder.encode("noteStart", noteData))
+            tokens.append(self._encoder.encode(*createEndOfTieEvent()))
+
+            # write all the tokens in this time step
+            while len(thisTimeStep) > 0:
+                currentTime = thisTimeStep.pop(0)
+
+                # write current time value only if the current time is more the 0 else we already declared time above
+                if currentTime-startTime > self.minTimeForNotes or not writtenTieTime:
+                    tokens.append(self._encoder.encode(*createTimeEvent(currentTime - startTime)))
+
+                # bend if any first
+                for event in sortedEvents[currentTime]["bend"]:
+                    tokens.append(self._encoder.encode(*event))
+                # end notes
+                for event in sortedEvents[currentTime]["end"]:
+                    lastOpenNotes[event[2]] = None
+                    tokens.append(self._encoder.encode(*event))
+
+                # then write all new notes
+                for event in sortedEvents[currentTime]["start"]:
+                    tokens.append(self._encoder.encode(*event))
+                    lastOpenNotes[event[2]] = event[1]
+
+            tokens.append(self._encoder.encode(*createEndOfSeqEvent()))
+            sections.append(SongSection(startTime,stopTime,tokens))
+            print(tokens)
+            for token in tokens:
+                print(self._encoder.decode(token))
+        return sections
 
 def get_all_filenames(directory):
     data = []
@@ -280,4 +331,4 @@ def get_all_filenames(directory):
 if __name__ == '__main__':
     all_dlcs = get_all_filenames("../Downloads/")
     tokenizer = GuitarTokenizer(1, 1000)
-    tokenizer.convertSong(all_dlcs[4]["lead"])
+    pprint(tokenizer.convertSong(all_dlcs[4]["lead"]))
