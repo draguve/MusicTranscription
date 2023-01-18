@@ -4,6 +4,7 @@ import bs4
 import os
 from pathlib import Path
 from dataclasses import dataclass
+import sortedcontainers
 
 
 def atts_plus_bend_values(item: bs4.PageElement):
@@ -63,59 +64,110 @@ class SongSection:
     tokens: list[int]
 
 
-class Tokenizer:
+noteStartEvent = Event(
+    "noteStart",
+    [
+        EventVariable("string", 0, 5),
+        EventVariable("fret", 0, 25),
+        EventVariable("palm_mute", 0, 1),
+        EventVariable("hammer_on", 0, 1),
+        # EventVariable("pinch", 0, 1),
+        # TODO : Vibrato
+        # TODO : How to handle link next
+        EventVariable("harmonic", 0, 1),  # TODO: Ive joined harmonic and pinch for now
+        # EventVariable("fret_hand_mute", 0, 1), # TODO: Ive joined fret hand mute and palm mute for now
+        EventVariable("accent", 0, 1),
+        # EventRanges.EventRange("hopo", 0, 1), hopo is hammer on pull off
+        EventVariable("tap", 0, 1)
+    ]
+)
+
+
+def createNoteStartEvent(string: int, fret: int, palm_mute: bool, hammer_on: bool, harmonic: bool, accent: bool,
+                         tap: bool):
+    return "noteStart", [string, fret, 1 if palm_mute else 0, 1 if hammer_on else 0, 1 if harmonic else 0,
+                         1 if accent else 0, 1 if tap else 0]
+
+
+noteEndEvent = Event(
+    "noteEnd",
+    [
+        EventVariable("string", 0, 5),
+        EventVariable("fret", 0, 25),
+        EventVariable("pull_off", 0, 1),
+        EventVariable("unpitched_slide", 0, 1)
+    ]
+)
+
+
+def createNoteEndEvent(string: int, fret: int, pull_off: bool, unpitched_slide: bool):
+    return "noteEnd", [string, fret, 1 if pull_off else 0, 1 if unpitched_slide else 0]
+
+
+noteBendEvent = Event(
+    "bend",
+    [
+        EventVariable("string", 1, 6),
+        EventVariable("semi-tone", -2.5, 2.5, 0.5, False),
+        EventVariable("tap", 0, 1)
+    ]
+)
+
+
+def createNoteBendEvent(string: int, semi_tone: float, tap: bool, ):
+    return "bend", [string, semi_tone, 1 if tap else 0]
+
+
+endOfTieEvent = Event(
+    "eot",  # End of Tie Section
+    [
+        EventVariable("EOT", 0, 0)
+    ]
+)
+
+
+def createEndOfTieEvent():
+    return "eot", [0]
+
+
+endOfSequenceEvent = Event(
+    "eos",  # End of Sequence
+    [
+        EventVariable("EOS", 0, 0)
+    ]
+)
+
+
+def createEndOfSeqEvent():
+    return "eos", [0]
+
+
+class GuitarTokenizer:
     def __init__(self, numberOfSeconds, timeStepsPerSecond):
+        self.minTimeForNotes = 1 / timeStepsPerSecond
         self._encoder = Encoder([
             Event(
                 "time",
                 [generateTimeRange(numberOfSeconds, timeStepsPerSecond)]
             ),
-            Event(
-                "noteStart",
-                [
-                    EventVariable("string", 0, 5),
-                    EventVariable("fret", 0, 25),
-                    EventVariable("palm_mute", 0, 1),
-                    EventVariable("hammer_on", 0, 1),
-                    # EventRanges.EventRange("hopo", 0, 1), hopo is hammer on pull off
-                    EventVariable("tap", 0, 1)
-                ]
-            ),
-            Event(
-                "noteEnd",
-                [
-                    EventVariable("string", 0, 5),
-                    EventVariable("fret", 0, 25),
-                    EventVariable("pull_off", 0, 1),
-                    EventVariable("unpitched_slide", 0, 1)
-                ]
-            ),
-            Event(
-                "bend",
-                [
-                    EventVariable("string", 1, 6),
-                    EventVariable("semi-tone", -2.5, 2.5, 0.5, False),
-                    EventVariable("tap", 0, 1)
-                ]
-            ),
-            Event(
-                "eot",  # End of Tie Section
-                [
-                    EventVariable("EOS", 0, 0)
-                ]
-            ),
-            Event(
-                "eos",  # End of Sequence
-                [
-                    EventVariable("EOS", 0, 0)
-                ]
-            ),
+            noteStartEvent,
+            noteEndEvent,
+            noteBendEvent,
+            endOfTieEvent,
+            endOfSequenceEvent,
         ])
+        print(self.minTimeForNotes)
+
+    def convertSong(self, path):
+        sortedNotes = sortedcontainers.SortedDict()
+        loadedFile = parse_xml_file(path)
+        for note in loadedFile["notes"]:
+            print(note)
 
 
-def get_all_filenames():
+def get_all_filenames(directory):
     data = []
-    for root, dirs, files in os.walk("Downloads"):
+    for root, dirs, files in os.walk(directory):
         for filename in files:
             if filename.endswith(".ogg") and not filename.endswith("_preview.ogg"):
                 dlc = {
@@ -130,6 +182,9 @@ def get_all_filenames():
                 data.append(dlc)
     return data
 
+
 if __name__ == '__main__':
-    x = Tokenizer(1,1000)
-    print(x._encoder.numberOfTokens)
+    all_dlcs = get_all_filenames("../Downloads/")
+    tokenizer = GuitarTokenizer(1, 1000)
+    tokenizer.convertSong(all_dlcs[1]["lead"])
+    print(tokenizer._encoder.numberOfTokens)
