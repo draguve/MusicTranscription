@@ -7,6 +7,17 @@ from dataclasses import dataclass
 import sortedcontainers
 
 
+def mergeDicts(dict1, dict2):
+    """
+    Here Dict2 takes precedent over Dict1
+    @param dict1:
+    @param dict2:
+    @return:
+    """
+    res = {**dict1, **dict2}
+    return res
+
+
 def atts_plus_bend_values(item: bs4.PageElement):
     all_attrs = item.attrs
     all_attrs["bendValues"] = [bend.attrs for bend in (item.find_all("bendValue"))]
@@ -64,7 +75,7 @@ class SongSection:
     tokens: list[int]
 
 
-noteStartEvent = Event(
+noteStartEventHandler = Event(
     "noteStart",
     [
         EventVariable("string", 0, 5),
@@ -89,7 +100,7 @@ def createNoteStartEvent(string: int, fret: int, palm_mute: bool, hammer_on: boo
                          1 if accent else 0, 1 if tap else 0]
 
 
-noteEndEvent = Event(
+noteEndEventHandler = Event(
     "noteEnd",
     [
         EventVariable("string", 0, 5),
@@ -104,10 +115,10 @@ def createNoteEndEvent(string: int, fret: int, pull_off: bool, unpitched_slide: 
     return "noteEnd", [string, fret, 1 if pull_off else 0, 1 if unpitched_slide else 0]
 
 
-noteBendEvent = Event(
+noteBendEventHandler = Event(
     "bend",
     [
-        EventVariable("string", 1, 6),
+        EventVariable("string", 0, 5),
         EventVariable("semi-tone", -2.5, 2.5, 0.5, False),
         EventVariable("tap", 0, 1)
     ]
@@ -118,7 +129,7 @@ def createNoteBendEvent(string: int, semi_tone: float, tap: bool, ):
     return "bend", [string, semi_tone, 1 if tap else 0]
 
 
-endOfTieEvent = Event(
+endOfTieEventHandler = Event(
     "eot",  # End of Tie Section
     [
         EventVariable("EOT", 0, 0)
@@ -130,7 +141,7 @@ def createEndOfTieEvent():
     return "eot", [0]
 
 
-endOfSequenceEvent = Event(
+endOfSequenceEventHandler = Event(
     "eos",  # End of Sequence
     [
         EventVariable("EOS", 0, 0)
@@ -150,19 +161,102 @@ class GuitarTokenizer:
                 "time",
                 [generateTimeRange(numberOfSeconds, timeStepsPerSecond)]
             ),
-            noteStartEvent,
-            noteEndEvent,
-            noteBendEvent,
-            endOfTieEvent,
-            endOfSequenceEvent,
+            noteStartEventHandler,
+            noteEndEventHandler,
+            noteBendEventHandler,
+            endOfTieEventHandler,
+            endOfSequenceEventHandler,
         ])
-        print(self.minTimeForNotes)
+
+    def processAndAddNote(self, sortedEvents, n):
+        note: dict = n
+        noteTime = float(note["time"])
+        if not noteTime in sortedEvents:
+            sortedEvents[noteTime] = []
+
+        # create start note
+        sortedEvents[noteTime].append(
+            createNoteStartEvent(
+                string=int(note["string"]),
+                fret=int(note["fret"]),
+                palm_mute="palmMute" in note,
+                hammer_on="hammerOn" in note or "hopo" in note,
+                harmonic="harmonic" in note or "harmonicPinch" in note,
+                accent="accent" in note,
+                tap="tap" in note)
+        )
+
+        noteEndTime = noteTime + float(note["sustain"]) if "sustain" in note else noteTime + self.minTimeForNotes
+        noteEndFret = int(note["slideTo"]) if "slideTo" in note else int(note["fret"])
+        noteEndFret = int(note["slideUnpitchTo"]) if "slideUnpitchTo" in note else noteEndFret
+
+        if not noteEndTime in sortedEvents:
+            sortedEvents[noteEndTime] = []
+
+        sortedEvents[noteEndTime].append(
+            createNoteEndEvent(
+                string=int(note["string"]),
+                fret=noteEndFret,
+                pull_off="pullOff" in note or "hopo" in note,
+                unpitched_slide="slideUnpitchTo" in note
+            )
+        )
+
+        if "bend" in note:
+            for bv in note["bendValues"]:
+                bendValue: dict = bv
+                bendTime = float(bendValue["time"])
+
+                if not bendTime in sortedEvents:
+                    sortedEvents[bendTime] = []
+
+                sortedEvents[bendTime].append(
+                    createNoteBendEvent(
+                        string=int(note["string"]),
+                        semi_tone=float(bendValue["step"]) if "step" in bendValue else 0.0,
+                        tap="tap" in bendValue
+                    )
+                )
+
+    def processAndAddChords(self, sortedEvents, c, chordTemplates):
+        chord: dict = c
+        chordTime = float(chord["time"])
+        chordAttributes = chord.copy()
+        del chordAttributes["chordNotes"]
+        del chordAttributes["chordId"]
+        # print(chordAttributes)
+        if "chordNotes" in chord and len(chord["chordNotes"]) > 0:
+            # do for every chordNote
+            for n in chord["chordNotes"]:
+                note = mergeDicts(chordAttributes, n)
+                self.processAndAddNote(sortedEvents, note)
+        else:
+            # do for every note chordId
+            chordId = int(chord["chordId"])
+            for n in chordTemplates[chordId]["notes"]:
+                note = mergeDicts(chordAttributes, n)
+                self.processAndAddNote(sortedEvents, note)
 
     def convertSong(self, path):
-        sortedNotes = sortedcontainers.SortedDict()
+        sortedEvents = sortedcontainers.SortedDict()
         loadedFile = parse_xml_file(path)
-        for note in loadedFile["notes"]:
-            print(note)
+
+        # convert chord templates notes to readable notes
+        for chordTemplate in loadedFile["chordTemplates"]:
+            filtered_dict = {k: v for (k, v) in chordTemplate.items() if "fret" in k}
+            chordTemplate["notes"] = [{"string": k.replace("fret", ""), "fret": v} for (k, v) in filtered_dict.items()]
+
+        for n in loadedFile["notes"]:
+            self.processAndAddNote(sortedEvents, n)
+
+        for c in loadedFile["chords"]:
+            self.processAndAddChords(sortedEvents, c, loadedFile["chordTemplates"])
+
+        # TODO: need to add time events and tie events
+        for key in sortedEvents.keys():
+            for event in sortedEvents[key]:
+                print(key, event, self._encoder.encode(event[0], event[1]))
+            # print(key, sortedEvents[key])
 
 
 def get_all_filenames(directory):
@@ -186,5 +280,4 @@ def get_all_filenames(directory):
 if __name__ == '__main__':
     all_dlcs = get_all_filenames("../Downloads/")
     tokenizer = GuitarTokenizer(1, 1000)
-    tokenizer.convertSong(all_dlcs[1]["lead"])
-    print(tokenizer._encoder.numberOfTokens)
+    tokenizer.convertSong(all_dlcs[4]["lead"])
