@@ -30,10 +30,6 @@ class EventVariable:
         return round(new_value) if self.roundAtEnd else new_value
 
 
-def generateTimeRange(maxTimeSteps, timeStepsPerSecond):
-    return EventVariable("time", 0, maxTimeSteps / timeStepsPerSecond, 1 / timeStepsPerSecond)
-
-
 @dataclass
 class Event:
     eventName: str
@@ -54,6 +50,8 @@ class Event:
         return self._numberOfTokens
 
     def encode(self, data: list):
+        if self.numberOfTokens == 1:
+            return 0
         assert len(self.subEvents) == len(data)
         value = 0
         for i in range(0, len(self.subEvents)):
@@ -61,14 +59,20 @@ class Event:
         return value
 
     def decode(self, value) -> list:
+        if self.numberOfTokens == 1:
+            return [True]
         assert 0 <= value < self.numberOfTokens
         data = []
         remaining = value
-        for i in range(0,len(self.subEvents)):
-            temp = math.floor(remaining/self._weights[i])
+        for i in range(0, len(self.subEvents)):
+            temp = math.floor(remaining / self._weights[i])
             data.append(self.subEvents[i].decode(temp))
-            remaining -= temp*self._weights[i]
+            remaining -= temp * self._weights[i]
         return data
+
+
+def generateTimeRange(numOfSeconds, timeStepsPerSecond):
+    return EventVariable("time", 0, numOfSeconds, 1 / timeStepsPerSecond)
 
 
 if __name__ == '__main__':
@@ -104,6 +108,29 @@ if __name__ == '__main__':
             EventVariable("tap", 0, 1)
         ]
     )
-    print(thing.encode([25, 5,2.0,1, 1]))
+    print(thing.encode([25, 5, 2.0, 1, 1]))
     print(thing.decode(6859))
 
+    thing = Event(
+        "time",
+        [
+            generateTimeRange(2, 100)
+        ]
+    )
+    print(thing.numberOfTokens)
+    print(thing.encode([0.1]))
+    print(thing.encode([0.4]))
+    print(thing.encode([0.6]))
+    print(thing.encode([0.7]))
+    print(thing.encode([1.7]))
+    print(thing.encode([1.95]))
+
+    thing = Event(
+        "EOS",
+        [
+            EventVariable("EOS", 0, 0)
+        ]
+    )
+    print(thing.numberOfTokens)
+    print(thing.encode([0]))
+    print(thing.decode(0))
