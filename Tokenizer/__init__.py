@@ -1,11 +1,10 @@
-from Event import Event, EventVariable, generateTimeRange
-from Encoder import Encoder
-import bs4
-import os
-from pathlib import Path
+from Tokenizer.EventHandler import Handler, EventVariable, generateTimeRange
+from Tokenizer.Encoder import Encoder
+from Tokenizer.SongXMLParser import parse_xml_file
 from dataclasses import dataclass
 import sortedcontainers
 from pprint import pprint
+from TUtils import get_all_dlc_files
 
 
 def mergeDicts(dict1, dict2):
@@ -19,57 +18,7 @@ def mergeDicts(dict1, dict2):
     return res
 
 
-def atts_plus_bend_values(item: bs4.PageElement):
-    all_attrs = item.attrs
-    all_attrs["bendValues"] = [bend.attrs for bend in (item.find_all("bendValue"))]
-    return all_attrs
-
-
-def attrs_plus_chord_notes(chord: bs4.PageElement):
-    all_attrs = chord.attrs
-    all_attrs["chordNotes"] = [atts_plus_bend_values(note) for note in chord.find_all("chordNote")]
-    return all_attrs
-
-
-def parse_vocals(xml_path):
-    with open(xml_path, 'r') as f:
-        data = f.read()
-        bs_data = bs4.BeautifulSoup(data, 'xml')
-        xml_data = {"vocal": [item.attrs for item in bs_data.find_all("vocal")]}
-        return xml_data
-
-
-def parse_showlights(xml_path):
-    with open(xml_path, 'r') as f:
-        data = f.read()
-        bs_data = bs4.BeautifulSoup(data, 'xml')
-        xml_data = {"showlight": [item.attrs for item in bs_data.find_all("showlight")]}
-        return xml_data
-
-
-def parse_xml_file(xml_path):
-    with open(xml_path, 'r') as f:
-        data = f.read()
-        bs_data = bs4.BeautifulSoup(data, 'xml')
-        xml_data = {"title": bs_data.find("title").string, "tuning": bs_data.find("tuning").attrs,
-                    "arrangement": bs_data.find("arrangement").string, "offset": bs_data.find("offset").string,
-                    "centOffset": bs_data.find("centOffset").string, "songLength": bs_data.find("songLength").string,
-                    "startBeat": bs_data.find("startBeat").string, "averageTempo": bs_data.find("averageTempo").string,
-                    "capo": bs_data.find("startBeat").string, "artistName": bs_data.find("artistName").string,
-                    "albumName": bs_data.find("albumName").string, "albumYear": bs_data.find("albumYear").string,
-                    "arrangementProperties": bs_data.find("arrangementProperties").attrs,
-                    "notes": [atts_plus_bend_values(item) for item in bs_data.find_all("note")],
-                    "chords": [attrs_plus_chord_notes(chord) for chord in bs_data.find_all("chord")],
-                    "ebeats": [item.attrs for item in bs_data.find_all("ebeat")],
-                    "chordTemplates": [item.attrs for item in bs_data.find_all("chordTemplate")],
-                    "phraseIterations": [item.attrs for item in bs_data.find_all("phraseIteration")],
-                    "sections": [item.attrs for item in bs_data.find_all("section")],
-                    "anchors": [item.attrs for item in bs_data.find_all("anchor")],
-                    "handShapes": [item.attrs for item in bs_data.find_all("handShape")]}
-        return xml_data
-
-
-noteStartEventHandler = Event(
+noteStartEventHandler = Handler(
     "noteStart",
     [
         EventVariable("string", 0, 5),
@@ -94,7 +43,7 @@ def createNoteStartEvent(string: int, fret: int, palm_mute: bool, hammer_on: boo
                          1 if accent else 0, 1 if tap else 0], string
 
 
-noteEndEventHandler = Event(
+noteEndEventHandler = Handler(
     "noteEnd",
     [
         EventVariable("string", 0, 5),
@@ -109,7 +58,7 @@ def createNoteEndEvent(string: int, fret: int, pull_off: bool, unpitched_slide: 
     return "noteEnd", [string, fret, 1 if pull_off else 0, 1 if unpitched_slide else 0], string
 
 
-noteBendEventHandler = Event(
+noteBendEventHandler = Handler(
     "bend",
     [
         EventVariable("string", 0, 5),
@@ -123,7 +72,7 @@ def createNoteBendEvent(string: int, semi_tone: float, tap: bool, ):
     return "bend", [string, semi_tone, 1 if tap else 0], string
 
 
-endOfTieEventHandler = Event(
+endOfTieEventHandler = Handler(
     "eot",  # End of Tie Section
     [
         EventVariable("EOT", 0, 0)
@@ -135,7 +84,7 @@ def createEndOfTieEvent():
     return "eot", [0]
 
 
-endOfSequenceEventHandler = Event(
+endOfSequenceEventHandler = Handler(
     "eos",  # End of Sequence
     [
         EventVariable("EOS", 0, 0)
@@ -163,7 +112,7 @@ class GuitarTokenizer:
         self._numberOfSeconds = numberOfSeconds
         self._timeStepsPerSecond = timeStepsPerSecond
         self.minTimeForNotes = 1 / timeStepsPerSecond
-        self._timeEventHandler = Event(
+        self._timeEventHandler = Handler(
             "time",
             [generateTimeRange(numberOfSeconds, timeStepsPerSecond)]
         )
@@ -271,14 +220,10 @@ class GuitarTokenizer:
                 thisTimeStep.append(queue.pop(0))
 
             tokens = []
-            writtenTieTime = False
             # TODO : check ties are created properly something feels off, THERE IS A BUG HERE FIX IT
             # restart all notes in tie
             for noteData in lastOpenNotes:
                 if noteData is not None:
-                    if not writtenTieTime:
-                        tokens.append(self._encoder.encode(*createTimeEvent(0)))
-                        writtenTieTime = True
                     tokens.append(self._encoder.encode("noteStart", noteData))
             tokens.append(self._encoder.encode(*createEndOfTieEvent()))
 
@@ -286,9 +231,8 @@ class GuitarTokenizer:
             while len(thisTimeStep) > 0:
                 currentTime = thisTimeStep.pop(0)
 
-                # write current time value only if the current time is more the 0 else we already declared time above
-                if currentTime-startTime > self.minTimeForNotes or not writtenTieTime:
-                    tokens.append(self._encoder.encode(*createTimeEvent(currentTime - startTime)))
+                # reemit even in case of 0
+                tokens.append(self._encoder.encode(*createTimeEvent(currentTime - startTime)))
 
                 # bend if any first
                 for event in sortedEvents[currentTime]["bend"]:
@@ -304,31 +248,14 @@ class GuitarTokenizer:
                     lastOpenNotes[event[2]] = event[1]
 
             tokens.append(self._encoder.encode(*createEndOfSeqEvent()))
-            sections.append(SongSection(startTime,stopTime,tokens))
-            print(tokens)
-            for token in tokens:
-                print(self._encoder.decode(token))
+            sections.append(SongSection(startTime, stopTime, tokens))
+            # print(len(tokens),tokens)
+            # for token in tokens:
+            #     print(self._encoder.decode(token))
         return sections
-
-def get_all_filenames(directory):
-    data = []
-    for root, dirs, files in os.walk(directory):
-        for filename in files:
-            if filename.endswith(".ogg") and not filename.endswith("_preview.ogg"):
-                dlc = {
-                    "ogg": os.path.join(root, filename)
-                }
-                xml_files = Path(root).glob('*.xml')
-                for xml_file in xml_files:
-                    xml_filename = Path(xml_file)
-                    dlc[xml_filename.stem.replace("arr_", "")] = str(xml_file)
-                for rs2_file in (Path(root).glob('*.rs2dlc')):
-                    dlc["rs2dlc"] = str(rs2_file)
-                data.append(dlc)
-    return data
 
 
 if __name__ == '__main__':
-    all_dlcs = get_all_filenames("../Downloads/")
+    all_dlcs = get_all_dlc_files("../Downloads/")
     tokenizer = GuitarTokenizer(1, 1000)
     pprint(tokenizer.convertSong(all_dlcs[4]["lead"]))

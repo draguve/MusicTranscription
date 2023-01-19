@@ -1,4 +1,4 @@
-import Event
+from Tokenizer import EventHandler
 from dataclasses import dataclass
 from bisect import bisect_right
 
@@ -7,7 +7,7 @@ from bisect import bisect_right
 
 @dataclass
 class Encoder:
-    events: list[Event.Event]
+    events: list[EventHandler.Handler]
 
     def __post_init__(self):
         self._locations = []
@@ -21,7 +21,7 @@ class Encoder:
             current += event.numberOfTokens
         self._numberOfTokens = current
 
-    def encode(self, eventName, data,string=-1):
+    def encode(self, eventName, data, string=-1):
         assert eventName in self._handlers
         eventOffset = self._nameToLocation[eventName]
         eventIndex = self._handlers[eventName].encode(data)
@@ -39,35 +39,35 @@ class Encoder:
 
 
 if __name__ == '__main__':
-    noteStartHandler = Event.Event(
+    noteStartHandler = EventHandler.Handler(
         "noteStart",
         [
-            Event.EventVariable("string", 0, 5),
-            Event.EventVariable("fret", 0, 25),
-            Event.EventVariable("palm_mute", 0, 1),
-            Event.EventVariable("hammer_on", 0, 1),
+            EventHandler.EventVariable("string", 0, 5),
+            EventHandler.EventVariable("fret", 0, 25),
+            EventHandler.EventVariable("palm_mute", 0, 1),
+            EventHandler.EventVariable("hammer_on", 0, 1),
             # EventRanges.EventRange("hopo", 0, 1), hopo is hammer on pull off
-            Event.EventVariable("tap", 0, 1)
+            EventHandler.EventVariable("tap", 0, 1)
         ]
     )
 
     # Slides are notes that start somewhere but end somewhere else?
-    noteEndHandler = Event.Event(
+    noteEndHandler = EventHandler.Handler(
         "noteEnd",
         [
-            Event.EventVariable("string", 0, 5),
-            Event.EventVariable("fret", 0, 25),
-            Event.EventVariable("pull_off", 0, 1),
-            Event.EventVariable("unpitched_slide", 0, 1)
+            EventHandler.EventVariable("string", 0, 5),
+            EventHandler.EventVariable("fret", 0, 25),
+            EventHandler.EventVariable("pull_off", 0, 1),
+            EventHandler.EventVariable("unpitched_slide", 0, 1)
         ]
     )
 
-    bendHandler = Event.Event(
+    bendHandler = EventHandler.Handler(
         "bend",
         [
-            Event.EventVariable("string", 1, 6),
-            Event.EventVariable("semi-tone", -2.5, 2.5, 0.5, False),
-            Event.EventVariable("tap", 0, 1)
+            EventHandler.EventVariable("string", 1, 6),
+            EventHandler.EventVariable("semi-tone", -2.5, 2.5, 0.5, False),
+            EventHandler.EventVariable("tap", 0, 1)
         ]
     )
 

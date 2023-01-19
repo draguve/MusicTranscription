@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import math
-from lerp import *
+from Tokenizer.lerp import *
 import numpy as np
 
 
@@ -31,7 +31,7 @@ class EventVariable:
 
 
 @dataclass
-class Event:
+class Handler:
     eventName: str
     subEvents: list[EventVariable]
 
@@ -98,7 +98,7 @@ if __name__ == '__main__':
     print(encoded)
     print([thing.decode(i) for i in encoded])
 
-    thing = Event(
+    thing = Handler(
         "node",
         [
             EventVariable("fret", 0, 25),
@@ -111,7 +111,7 @@ if __name__ == '__main__':
     print(thing.encode([25, 5, 2.0, 1, 1]))
     print(thing.decode(6859))
 
-    thing = Event(
+    thing = Handler(
         "time",
         [
             generateTimeRange(2, 100)
@@ -125,7 +125,7 @@ if __name__ == '__main__':
     print(thing.encode([1.7]))
     print(thing.encode([1.95]))
 
-    thing = Event(
+    thing = Handler(
         "EOS",
         [
             EventVariable("EOS", 0, 0)
