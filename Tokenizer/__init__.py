@@ -125,6 +125,9 @@ class GuitarTokenizer:
             endOfSequenceEventHandler,
         ])
 
+    def numberOfTokens(self) -> int:
+        return self._encoder.numberOfTokens
+
     def processAndAddNote(self, sortedEvents, n):
         note: dict = n
         noteTime = float(note["time"])

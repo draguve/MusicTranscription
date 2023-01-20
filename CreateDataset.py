@@ -8,16 +8,19 @@ import sortedcontainers
 import numpy as np
 from tqdm import tqdm
 
-SpectogramSizeInSeconds = 1.0
+SpectrogramSizeInSeconds = 1.0
 NumberOfTimeTokensPerSecond = 1000
+
+maxNumberOfTokens = 0
 
 toRemoveForStore = ["notes", "chords", "ebeats", "chordTemplates", "phraseIterations", "sections", "anchors",
                     "handShapes"]
 
 
 def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, fileLocations):
+    global maxNumberOfTokens
     parsedSong = SongXMLParser.parse_xml_file(fileLocations[typeOfArrangement])
-    #TODO: removing all now e standard songs for now fix later
+    # TODO: removing all now e standard songs for now fix later
     for string in parsedSong["tuning"].keys():
         if parsedSong["tuning"][string] != "0":
             return 0
@@ -33,11 +36,12 @@ def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, 
     tokensStore = songGroup.create_dataset("tokens", len(startSections), dtype=dt)
     for i in range(len(startSections)):
         tokensStore[i] = np.array(songSections[i].tokens)
+        maxNumberOfTokens = max(maxNumberOfTokens, len(tokensStore[i]))
     dataToStore = parsedSong.copy()
     for key in toRemoveForStore:
         del dataToStore[key]
     sortedDlcs[lastAdded] = {"group": group_name, "startIndex": lastAdded, "len": numberOfSection,
-                             typeOfArrangement: typeOfArrangement,
+                             "typeOfArrangement": typeOfArrangement,
                              "ogg": fileLocations["ogg"]}
     for item in sortedDlcs[lastAdded].keys():
         songGroup.attrs[item] = sortedDlcs[lastAdded][item]
@@ -50,7 +54,7 @@ if __name__ == '__main__':
     sortedDlcs = sortedcontainers.SortedDict()
     last_added = 0
     dlcs = get_all_dlc_files("Downloads")
-    tokenizer = GuitarTokenizer(SpectogramSizeInSeconds, NumberOfTimeTokensPerSecond)
+    tokenizer = GuitarTokenizer(SpectrogramSizeInSeconds, NumberOfTimeTokensPerSecond)
     # creating a file
     with h5py.File('test.hdf5', 'w') as f:
         songs = f.create_group("Songs")
@@ -65,4 +69,10 @@ if __name__ == '__main__':
                 #     last_added += store_dlc(last_added, DLCKey, songs, tokenizer, "rhythm")
             pbar.update(1)
         songs.attrs["index"] = json.dumps(sortedDlcs)
+        songs.attrs["totalSize"] = last_added
+        songs.attrs["maxTokens"] = maxNumberOfTokens
+        songs.attrs["spectrogramSizeInSeconds"] = SpectrogramSizeInSeconds
+        songs.attrs["numberOfTimeTokensPerSecond"] = NumberOfTimeTokensPerSecond
+        # This is without a pad token
+        songs.attrs["vocabSize"] = tokenizer.numberOfTokens()
         pbar.close()
