@@ -25,7 +25,7 @@ def load_song(dlc, seconds=1, samplesPerSecond=1000):
     output["sr"] = sr
     if "lead" in dlc:
         output["lead"] = []
-        songSections = tokenizer.convertSong(dlc["lead"])
+        songSections = tokenizer.convertSongFromPath(dlc["lead"])
         for section in songSections:
             startSample = int(section.startSeconds * sr)
             endSample = int(startSample + sr * seconds)
@@ -34,7 +34,7 @@ def load_song(dlc, seconds=1, samplesPerSecond=1000):
             output["lead"].append(GuitarSectionAllData(section, sectionSpec))
     if "rhythm" in dlc:
         output["rhythm"] = []
-        songSections = tokenizer.convertSong(dlc["rhythm"])
+        songSections = tokenizer.convertSongFromPath(dlc["rhythm"])
         for section in songSections:
             startSample = int(section.startSeconds * sr)
             endSample = int(startSample + sr * seconds)

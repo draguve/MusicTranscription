@@ -62,7 +62,7 @@ noteBendEventHandler = Handler(
     "bend",
     [
         EventVariable("string", 0, 5),
-        EventVariable("semi-tone", -2.5, 2.5, 0.5, False),
+        EventVariable("semi-tone", -3, 3, 0.5, False),
         EventVariable("tap", 0, 1)
     ]
 )
@@ -194,9 +194,12 @@ class GuitarTokenizer:
                 note = mergeDicts(chordAttributes, n)
                 self.processAndAddNote(sortedEvents, note)
 
-    def convertSong(self, path):
-        sortedEvents = sortedcontainers.SortedDict()
+    def convertSongFromPath(self, path):
         loadedFile = parse_xml_file(path)
+        return self.convertSongFromParsedFile(loadedFile)
+
+    def convertSongFromParsedFile(self,loadedFile):
+        sortedEvents = sortedcontainers.SortedDict()
 
         # convert chord templates notes to readable notes
         for chordTemplate in loadedFile["chordTemplates"]:
@@ -252,10 +255,10 @@ class GuitarTokenizer:
             # print(len(tokens),tokens)
             # for token in tokens:
             #     print(self._encoder.decode(token))
+            # print("-----------------------------------------------------------")
         return sections
-
 
 if __name__ == '__main__':
     all_dlcs = get_all_dlc_files("../Downloads/")
     tokenizer = GuitarTokenizer(1, 1000)
-    pprint(tokenizer.convertSong(all_dlcs[4]["lead"]))
+    pprint(tokenizer.convertSongFromPath(all_dlcs[4]["lead"]))
