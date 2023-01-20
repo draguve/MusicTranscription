@@ -11,12 +11,19 @@ from tqdm import tqdm
 SpectogramSizeInSeconds = 1.0
 NumberOfTimeTokensPerSecond = 1000
 
+toRemoveForStore = ["notes", "chords", "ebeats", "chordTemplates", "phraseIterations", "sections", "anchors",
+                    "handShapes"]
 
-def store_dlc(last_added, DLCKey, songs, tokenizer, type):
-    group_name = f"{DLCKey}_{type}"
-    songGroup = songs.create_group(group_name)
-    parsedSong = SongXMLParser.parse_xml_file(dlc[type])
-    songSections = tokenizer.convertSongFromParsedFile(parsedSong)
+
+def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, fileLocations):
+    parsedSong = SongXMLParser.parse_xml_file(fileLocations[typeOfArrangement])
+    #TODO: removing all now e standard songs for now fix later
+    for string in parsedSong["tuning"].keys():
+        if parsedSong["tuning"][string] != "0":
+            return 0
+    group_name = f"{dlcKey}_{typeOfArrangement}"
+    songGroup = songGroup.create_group(group_name)
+    songSections = guitarTokenizer.convertSongFromParsedFile(parsedSong)
     numberOfSection = len(songSections)
     startSections = np.array([section.startSeconds for section in songSections])
     endSections = np.array([section.stopSeconds for section in songSections])
@@ -26,9 +33,16 @@ def store_dlc(last_added, DLCKey, songs, tokenizer, type):
     tokensStore = songGroup.create_dataset("tokens", len(startSections), dtype=dt)
     for i in range(len(startSections)):
         tokensStore[i] = np.array(songSections[i].tokens)
-    sortedDlcs[last_added] = {"group": group_name, "startIndex": last_added, "len": numberOfSection, type: type}
-    for item in sortedDlcs[last_added].keys():
-        songGroup.attrs[item] = sortedDlcs[last_added][item]
+    dataToStore = parsedSong.copy()
+    for key in toRemoveForStore:
+        del dataToStore[key]
+    sortedDlcs[lastAdded] = {"group": group_name, "startIndex": lastAdded, "len": numberOfSection,
+                             typeOfArrangement: typeOfArrangement,
+                             "ogg": fileLocations["ogg"]}
+    for item in sortedDlcs[lastAdded].keys():
+        songGroup.attrs[item] = sortedDlcs[lastAdded][item]
+    for item in dataToStore.keys():
+        songGroup.attrs[item] = str(dataToStore[item])
     return numberOfSection
 
 
@@ -46,9 +60,9 @@ if __name__ == '__main__':
                 parsed_json = json.load(user_file)
                 DLCKey = parsed_json["DLCKey"]
                 if "lead" in dlc:
-                    last_added += store_dlc(last_added, DLCKey, songs, tokenizer, "lead")
-                if "rhythm" in dlc:
-                    last_added += store_dlc(last_added, DLCKey, songs, tokenizer, "rhythm")
+                    last_added += store_dlc(last_added, DLCKey, songs, tokenizer, "lead", dlc)
+                # if "rhythm" in dlc:
+                #     last_added += store_dlc(last_added, DLCKey, songs, tokenizer, "rhythm")
             pbar.update(1)
         songs.attrs["index"] = json.dumps(sortedDlcs)
         pbar.close()

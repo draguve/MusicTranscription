@@ -62,7 +62,7 @@ noteBendEventHandler = Handler(
     "bend",
     [
         EventVariable("string", 0, 5),
-        EventVariable("semi-tone", -3, 3, 0.5, False),
+        EventVariable("semi-tone", -5, 5, 0.5, False),
         EventVariable("tap", 0, 1)
     ]
 )
@@ -217,7 +217,8 @@ class GuitarTokenizer:
         lastOpenNotes = [None] * 6
         while len(queue) > 0:
             startTime = queue.pop(0)
-            stopTime = startTime + self._numberOfSeconds
+            #to cases where the stop time is exactly same as the start time of some notes
+            stopTime = startTime + self._numberOfSeconds - self.minTimeForNotes
             thisTimeStep = [startTime]
             while len(queue) > 0 and queue[0] <= stopTime:
                 thisTimeStep.append(queue.pop(0))
