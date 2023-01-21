@@ -16,14 +16,14 @@ maxNumberOfTokens = 0
 toRemoveForStore = ["notes", "chords", "ebeats", "chordTemplates", "phraseIterations", "sections", "anchors",
                     "handShapes"]
 
+arrangementsToConvert = ["lead", "lead2", "lead3", "rhythm", "rhythm2", "rhythm3"]
+arrangementIndex = {x: index - (len(arrangementsToConvert) / 2) for index, x in enumerate(arrangementsToConvert)}
+
 
 def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, fileLocations):
     global maxNumberOfTokens
     parsedSong = SongXMLParser.parse_xml_file(fileLocations[typeOfArrangement])
     # TODO: removing all now e standard songs for now fix later
-    for string in parsedSong["tuning"].keys():
-        if parsedSong["tuning"][string] != "0":
-            return 0
     group_name = f"{dlcKey}_{typeOfArrangement}"
     songGroup = songGroup.create_group(group_name)
     songSections = guitarTokenizer.convertSongFromParsedFile(parsedSong)
@@ -32,6 +32,9 @@ def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, 
     endSections = np.array([section.stopSeconds for section in songSections])
     songGroup.create_dataset("startSeconds", data=startSections)
     songGroup.create_dataset("endSeconds", data=endSections)
+    songGroup.create_dataset("tuning", data=[int(offset) for offset in
+                                             sortedcontainers.SortedDict(parsedSong["tuning"]).values()])
+    songGroup.attrs["arrangementIndex"] = arrangementIndex[typeOfArrangement]
     dt = h5py.vlen_dtype(np.dtype('int32'))
     tokensStore = songGroup.create_dataset("tokens", len(startSections), dtype=dt)
     for i in range(len(startSections)):
@@ -63,10 +66,9 @@ if __name__ == '__main__':
             with open(dlc["rs2dlc"]) as user_file:
                 parsed_json = json.load(user_file)
                 DLCKey = parsed_json["DLCKey"]
-                if "lead" in dlc:
-                    last_added += store_dlc(last_added, DLCKey, songs, tokenizer, "lead", dlc)
-                # if "rhythm" in dlc:
-                #     last_added += store_dlc(last_added, DLCKey, songs, tokenizer, "rhythm")
+                for key in dlc:
+                    if key in arrangementIndex:
+                        last_added += store_dlc(last_added, DLCKey, songs, tokenizer, key, dlc)
             pbar.update(1)
         songs.attrs["index"] = json.dumps(sortedDlcs)
         songs.attrs["totalSize"] = last_added

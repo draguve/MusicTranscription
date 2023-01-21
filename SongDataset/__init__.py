@@ -1,13 +1,10 @@
-import torch
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
-import h5py
-from pprint import pprint
 import json
-from sortedcontainers import SortedDict
+
+import h5py
+import torch
 import torchaudio
-from torch.nn.functional import pad
-import matplotlib.pyplot as plt
+from sortedcontainers import SortedDict
+from torch.utils.data import Dataset, DataLoader
 
 
 class SongDataset(Dataset):
@@ -48,12 +45,12 @@ class SongDataset(Dataset):
         output = self.transformation(waveform)
         padding = torch.full((self.maxTokens - len(songGroup["tokens"][sectionIndex]),), int(self.pad_token))
         tokens = torch.from_numpy(songGroup["tokens"][sectionIndex])
-        tokens = torch.cat((tokens, padding), 0)
-        print(output.shape)
-
+        tokens = torch.cat((tokens, padding), )
+        # print(output.shape)
+        tuning = torch.Tensor(songGroup["tuning"][0:])
+        tuningAndArrangement = torch.cat((tuning, torch.Tensor([songGroup.attrs["arrangementIndex"]])))
         # TODO create masks here
-
-        return output, tokens
+        return output, tuningAndArrangement, tokens
 
     def __len__(self):
         return self.size
@@ -69,6 +66,8 @@ if __name__ == '__main__':
         n_mels=128
     )
     dataset = SongDataset("../test.hdf5", mel_spectrogram, sampleRate=SAMPLE_RATE)
+    print(dataset[203])
     # loader = DataLoader(dataset=dataset, batch_size=4, shuffle=True, num_workers=4)
     # dataiter = iter(loader)
     # check = next(dataiter)
+    # print(check)
