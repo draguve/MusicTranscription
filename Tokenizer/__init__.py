@@ -201,7 +201,8 @@ class GuitarTokenizer:
         loadedFile = parse_xml_file(path)
         return self.convertSongFromParsedFile(loadedFile)
 
-    def convertSongFromParsedFile(self,loadedFile):
+    # TODO: need to pay attention to the capo
+    def convertSongFromParsedFile(self, loadedFile):
         sortedEvents = sortedcontainers.SortedDict()
 
         # convert chord templates notes to readable notes
@@ -220,7 +221,7 @@ class GuitarTokenizer:
         lastOpenNotes = [None] * 6
         while len(queue) > 0:
             startTime = queue.pop(0)
-            #to cases where the stop time is exactly same as the start time of some notes
+            # to cases where the stop time is exactly same as the start time of some notes
             stopTime = startTime + self._numberOfSeconds - self.minTimeForNotes
             thisTimeStep = [startTime]
             while len(queue) > 0 and queue[0] <= stopTime:
@@ -261,6 +262,7 @@ class GuitarTokenizer:
             #     print(self._encoder.decode(token))
             # print("-----------------------------------------------------------")
         return sections
+
 
 if __name__ == '__main__':
     all_dlcs = get_all_dlc_files("../Downloads/")

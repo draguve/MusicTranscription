@@ -48,9 +48,12 @@ class SongDataset(Dataset):
         tokens = torch.cat((tokens, padding), )
         # print(output.shape)
         tuning = torch.Tensor(songGroup["tuning"][0:])
-        tuningAndArrangement = torch.cat((tuning, torch.Tensor([songGroup.attrs["arrangementIndex"]])))
+        tuningAndArrangement = torch.cat((tuning, torch.Tensor([songGroup.attrs["arrangementIndex"]]),
+                                          torch.Tensor([float(songGroup.attrs["capo"])])))
         # TODO create masks here
-        return output, tuningAndArrangement, tokens
+        token_padding_mask = (tokens == self.pad_token)
+        target_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.maxTokens)
+        return output, tuningAndArrangement, tokens, token_padding_mask, target_mask
 
     def __len__(self):
         return self.size

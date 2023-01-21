@@ -37,7 +37,7 @@ def parse_xml_file(xml_path):
                     "arrangement": bs_data.find("arrangement").string, "offset": bs_data.find("offset").string,
                     "centOffset": bs_data.find("centOffset").string, "songLength": bs_data.find("songLength").string,
                     "startBeat": bs_data.find("startBeat").string, "averageTempo": bs_data.find("averageTempo").string,
-                    "capo": bs_data.find("startBeat").string, "artistName": bs_data.find("artistName").string,
+                    "capo": bs_data.find("capo").string, "artistName": bs_data.find("artistName").string,
                     "albumName": bs_data.find("albumName").string, "albumYear": bs_data.find("albumYear").string,
                     "arrangementProperties": bs_data.find("arrangementProperties").attrs,
                     "notes": [atts_plus_bend_values(item) for item in bs_data.find_all("note")],

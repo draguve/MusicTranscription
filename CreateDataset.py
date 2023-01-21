@@ -23,7 +23,6 @@ arrangementIndex = {x: index - (len(arrangementsToConvert) / 2) for index, x in 
 def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, fileLocations):
     global maxNumberOfTokens
     parsedSong = SongXMLParser.parse_xml_file(fileLocations[typeOfArrangement])
-    # TODO: removing all now e standard songs for now fix later
     group_name = f"{dlcKey}_{typeOfArrangement}"
     songGroup = songGroup.create_group(group_name)
     songSections = guitarTokenizer.convertSongFromParsedFile(parsedSong)

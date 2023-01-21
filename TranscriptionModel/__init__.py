@@ -8,14 +8,16 @@ from SongDataset import SongDataset
 
 
 class GuitarModel(nn.Module):
-    def __init__(self, input_shape):
+    def __init__(self, input_shape,dropout):
         super(GuitarModel, self).__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.dropout2d = nn.Dropout2d(dropout)
         self.conv1 = nn.Conv2d(
             in_channels=2,
             out_channels=4,
             kernel_size=(5, 5)
         )
-        self.relu = nn.ReLU()
+        self.relu = nn.GELU()
         self.maxPool1 = nn.MaxPool2d(
             kernel_size=(3, 3),
             stride=(3, 3)
@@ -25,7 +27,7 @@ class GuitarModel(nn.Module):
             out_channels=10,
             kernel_size=(5, 5)
         )
-        self.relu2 = nn.ReLU()
+        self.relu2 = nn.GELU()
         self.maxPool2 = nn.MaxPool2d(
             kernel_size=(2, 2),
             stride=(2, 2)
@@ -35,7 +37,7 @@ class GuitarModel(nn.Module):
             out_channels=25,
             kernel_size=(5, 5)
         )
-        self.relu3 = nn.ReLU()
+        self.relu3 = nn.GELU()
         self.maxPool3 = nn.MaxPool2d(
             kernel_size=(2, 2),
             stride=(2, 2)
@@ -49,23 +51,28 @@ class GuitarModel(nn.Module):
         self.flattenedSize = 1
         for i in output_shape:
             self.flattenedSize *= i
-        self.fc1 = nn.Linear(in_features=self.flattenedSize + 7, out_features=512)
-        self.relu4 = nn.ReLU()
+        # we add 8 for (6 tuning, 1 arrangement, 1 capo)
+        self.fc1 = nn.Linear(in_features=self.flattenedSize + 8, out_features=512)
+        self.relu4 = nn.GELU()
 
     def forward(self, x, tuningAndArrangement):
         x = self.conv1(x)
         x = self.relu(x)
         x = self.maxPool1(x)
+        x = self.dropout2d(x)
         x = self.conv2(x)
         x = self.relu2(x)
         x = self.maxPool2(x)
+        x = self.dropout2d(x)
         x = self.conv3(x)
         x = self.relu3(x)
         x = self.maxPool3(x)
+        x = self.dropout2d(x)
         x = torch.flatten(x)
         x = torch.cat((x, tuningAndArrangement))
         x = self.fc1(x)
         x = self.relu4(x)
+        x = self.dropout(x)
         return x
 
 
