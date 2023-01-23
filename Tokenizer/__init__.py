@@ -18,6 +18,18 @@ def mergeDicts(dict1, dict2):
     return res
 
 
+startOfSequenceEventHandler = Handler(
+    "sos",  # End of Sequence
+    [
+        EventVariable("SOS", 0, 0)
+    ]
+)
+
+
+def createStartOfSeqEvent():
+    return "sos", [0]
+
+
 noteStartEventHandler = Handler(
     "noteStart",
     [
@@ -117,6 +129,7 @@ class GuitarTokenizer:
             [generateTimeRange(numberOfSeconds, timeStepsPerSecond)]
         )
         self._encoder = Encoder([
+            startOfSequenceEventHandler,
             self._timeEventHandler,
             noteStartEventHandler,
             noteEndEventHandler,
@@ -227,7 +240,7 @@ class GuitarTokenizer:
             while len(queue) > 0 and queue[0] <= stopTime:
                 thisTimeStep.append(queue.pop(0))
 
-            tokens = []
+            tokens = [self._encoder.encode(*createStartOfSeqEvent())]
             # TODO : check ties are created properly something feels off, THERE IS A BUG HERE FIX IT
             # restart all notes in tie
             for noteData in lastOpenNotes:
