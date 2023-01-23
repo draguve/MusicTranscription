@@ -1,3 +1,5 @@
+import numpy as np
+
 from Tokenizer.EventHandler import Handler, EventVariable, generateTimeRange
 from Tokenizer.Encoder import Encoder
 from Tokenizer.SongXMLParser import parse_xml_file
@@ -28,6 +30,18 @@ startOfSequenceEventHandler = Handler(
 
 def createStartOfSeqEvent():
     return "sos", [0]
+
+
+silenceEventHandler = Handler(
+    "silence",  # End of Sequence
+    [
+        EventVariable("silence", 0, 0)
+    ]
+)
+
+
+def createSilenceEvent():
+    return "silence", [0]
 
 
 noteStartEventHandler = Handler(
@@ -135,6 +149,7 @@ class GuitarTokenizer:
             noteEndEventHandler,
             noteBendEventHandler,
             endOfTieEventHandler,
+            silenceEventHandler,
             endOfSequenceEventHandler,
         ])
 
@@ -230,29 +245,30 @@ class GuitarTokenizer:
             self.processAndAddChords(sortedEvents, c, loadedFile["chordTemplates"])
 
         sections = []
-        queue = list(sortedEvents.keys())
         lastOpenNotes = [None] * 6
-        while len(queue) > 0:
-            startTime = queue.pop(0)
-            # to cases where the stop time is exactly same as the start time of some notes
-            stopTime = startTime + self._numberOfSeconds - self.minTimeForNotes
-            thisTimeStep = [startTime]
-            while len(queue) > 0 and queue[0] <= stopTime:
-                thisTimeStep.append(queue.pop(0))
+
+        timeRange = np.arange(0.0, float(loadedFile["songLength"]), self._numberOfSeconds)
+        sortedEventsAsList = sortedEvents.keys()
+        if timeRange[-1] != float(loadedFile["songLength"]):
+            timeRange = np.append(timeRange, [float(loadedFile["songLength"])])
+        for index in range(1, len(timeRange)):
+            startTime = timeRange[index - 1]
+            stopTime = timeRange[index]
+            startLocation = sortedEvents.bisect_left(startTime)
+            endLocation = sortedEvents.bisect_right(stopTime) - 1
 
             tokens = [self._encoder.encode(*createStartOfSeqEvent())]
-            # TODO : check ties are created properly something feels off, THERE IS A BUG HERE FIX IT
-            # restart all notes in tie
+
+            # add all already open notes
             for noteData in lastOpenNotes:
                 if noteData is not None:
                     tokens.append(self._encoder.encode("noteStart", noteData))
             tokens.append(self._encoder.encode(*createEndOfTieEvent()))
 
-            # write all the tokens in this time step
-            while len(thisTimeStep) > 0:
-                currentTime = thisTimeStep.pop(0)
+            for i in range(startLocation, endLocation + 1):
+                currentTime = sortedEventsAsList[i]
 
-                # reemit even in case of 0
+                # emit time start token
                 tokens.append(self._encoder.encode(*createTimeEvent(currentTime - startTime)))
 
                 # bend if any first
@@ -268,16 +284,21 @@ class GuitarTokenizer:
                     tokens.append(self._encoder.encode(*event))
                     lastOpenNotes[event[2]] = event[1]
 
+            # check for silence
+            if len(tokens) == 2:
+                tokens.append(self._encoder.encode(*createSilenceEvent()))
             tokens.append(self._encoder.encode(*createEndOfSeqEvent()))
             sections.append(SongSection(startTime, stopTime, tokens))
-            # print(len(tokens),tokens)
-            # for token in tokens:
-            #     print(self._encoder.decode(token))
-            # print("-----------------------------------------------------------")
+
+        # for section in sections:
+        #     print(section.startSeconds,section.stopSeconds)
+        #     for toke in section.tokens:
+        #         pprint(self._encoder.decode(toke))
         return sections
 
 
 if __name__ == '__main__':
     all_dlcs = get_all_dlc_files("../Downloads/")
     tokenizer = GuitarTokenizer(1, 1000)
-    pprint(tokenizer.convertSongFromPath(all_dlcs[4]["lead"]))
+    tokenizer.convertSongFromPath(all_dlcs[4]["lead"])
+    # pprint(tokenizer.convertSongFromPath(all_dlcs[4]["lead"]))
