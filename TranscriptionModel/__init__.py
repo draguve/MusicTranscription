@@ -50,51 +50,30 @@ class GuitarModel(nn.Module):
         super(GuitarModel, self).__init__()
         self.dropout = nn.Dropout(dropout)
         self.dropout2d = nn.Dropout1d(dropout)
-        self.conv1 = nn.Conv2d(
+        self.conv = nn.Conv2d(
             in_channels=2,
-            out_channels=4,
-            kernel_size=(5, 5)
-        )
-        self.relu = nn.GELU()
-        self.maxPool1 = nn.MaxPool2d(
-            kernel_size=(3, 3),
-            stride=(3, 3)
-        )
-        self.conv2 = nn.Conv2d(
-            in_channels=4,
             out_channels=10,
             kernel_size=(5, 5)
         )
-        self.relu2 = nn.GELU()
-        self.maxPool2 = nn.MaxPool2d(
+        self.gelu = nn.GELU()
+        self.maxPool = nn.MaxPool2d(
             kernel_size=(2, 2),
             stride=(2, 2)
         )
-        self.conv3 = nn.Conv2d(
-            in_channels=10,
-            out_channels=25,
-            kernel_size=(5, 5)
-        )
-        self.relu3 = nn.GELU()
-        self.maxPool3 = nn.MaxPool2d(
-            kernel_size=(2, 2),
-            stride=(2, 2)
-        )
-        output_shape = torchshape.tensorshape(self.conv1, input_shape)
-        output_shape = torchshape.tensorshape(self.maxPool1, output_shape)
-        output_shape = torchshape.tensorshape(self.conv2, output_shape)
-        output_shape = torchshape.tensorshape(self.maxPool2, output_shape)
-        output_shape = torchshape.tensorshape(self.conv3, output_shape)
-        output_shape = torchshape.tensorshape(self.maxPool3, output_shape)
-        self.flattenedSize = 1
-        for i in output_shape:
-            self.flattenedSize *= i
+        
+        output_shape = torchshape.tensorshape(self.conv, input_shape)
+        output_shape = torchshape.tensorshape(self.maxPool, output_shape)
+
         # we add 8 for (6 tuning, 1 arrangement, 1 capo)
-        self.fc1 = nn.Linear(in_features=self.flattenedSize + 8, out_features=emb_size)
+        self.fc1 = nn.Linear(in_features=output_shape[1] * output_shape[2] + 8, out_features=emb_size)
+        self.tuning_seq_len = output_shape[3]
+
         self.relu4 = nn.GELU()
-        # TODO: need to do Token Embedding for the target/guitar tokens
-        self.tgt_embedding = TokenEmbedding(tgt_vocab_size, emb_size)
+
+        # Token Embedding for the target/guitar tokens
+        self.tgt_embedding = TokenEmbedding(tgt_vocab_size, emb_size)  # the sqrt is done inside the forward pass
         self.positionalEncoding = PositionalEncoding(emb_size, dropout)
+        self.numHeads = multi_head_attention_size
         self.transformer = nn.Transformer(
             d_model=emb_size,
             nhead=multi_head_attention_size,
@@ -106,40 +85,39 @@ class GuitarModel(nn.Module):
         self.generator = nn.Linear(emb_size, tgt_vocab_size)
 
     def forward(self, x, tuningAndArrangement, tgt, tgt_mask, tgt_pad_mask):
-        x = self.conv1(x)
-        x = self.relu(x)
-        x = self.maxPool1(x)
-        x = self.dropout2d(x)
-        x = self.conv2(x)
-        x = self.relu2(x)
-        x = self.maxPool2(x)
-        x = self.dropout2d(x)
-        x = self.conv3(x)
-        x = self.relu3(x)
-        x = self.maxPool3(x)
-        x = self.dropout2d(x)
-        x = torch.flatten(x)
-        x = torch.cat((x, tuningAndArrangement))
+        # current shape = (batch,2,128,87)
+        x = self.conv(x)
+        x = self.gelu(x)
+        x = self.maxPool(x)
+
+        x = x.permute(1, 2, 3, 0)  # convert shape to (chan,128,87,batch)
+        x = x.view((-1, *x.shape[2:]))  # convert shape to (post_conv*chan,87-conv_kernel_size,batch)
+        x = x.permute(2, 1, 0)  # convert shape to (batch,87-conv_kernel_size,post_conv*chan)
+
+        # create shape of tuning to (batch,seq_len,8)
+        tuningAndArrangement = tuningAndArrangement.unsqueeze(1).repeat(1, self.tuning_seq_len, 1)
+        x = torch.cat((x, tuningAndArrangement), 2)  # convert shape of to (batch,87-conv_kernel_size,post_conv*chan+8)
+
         x = self.fc1(x)
-        x = self.relu4(x)
-        # x = self.dropout(x)
-        # dropout in embedding as well
-        print(x.shape)
-        x = self.tgt_embedding(x)
-        print(x.shape)
+        # current input shape = (batch_size, sequence length, dim_model)
         x = self.positionalEncoding(x)
-        print(x.shape)
+        x = x.permute(1, 0, 2)  # current input shape = (sequence length,batch_size, dim_model)
+
+        # current target shape = (batch_size, sequence length, dim_model)
         tgt = self.tgt_embedding(tgt)
-        print(tgt.shape)
         tgt = self.positionalEncoding(tgt)
-        print(tgt.shape)
-        x = self.transformer(x, tgt, tgt_mask=tgt_mask)
+        tgt = tgt.permute(1, 0, 2)  # to get the shape (sequence length, batch_size, dim_model),
+
+        tgt_mask = tgt_mask.repeat(self.numHeads, 1, 1)  # multiply mask with n heads for some reason
+
+        x = self.transformer(x, tgt, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
         x = self.generator(x)
         return x
 
 
 if __name__ == '__main__':
     SAMPLE_RATE = 44100
+    BATCH_SIZE = 10
     mel_spectrogram = torchaudio.transforms.MelSpectrogram(
         sample_rate=SAMPLE_RATE,
         n_fft=2048,
@@ -147,9 +125,10 @@ if __name__ == '__main__':
         n_mels=128
     )
     dataset = SongDataset("../test.hdf5", mel_spectrogram, sampleRate=SAMPLE_RATE)
-    print(dataset.maxTokens)
-    spectrogram, tuningAndArrangement, tokens, token_padding_mask, target_mask = dataset[1]
-    model = GuitarModel((1, 2, 128, 87),
+    loader = DataLoader(dataset, batch_size=BATCH_SIZE)
+    data_iter = iter(loader)
+    spectrogram, tuningAndArrangement, tokens, token_padding_mask, target_mask = next(data_iter)
+    model = GuitarModel((BATCH_SIZE, 2, 128, 87),
                         emb_size=512,
                         num_encoder_layers=3,
                         num_decoder_layers=3,
