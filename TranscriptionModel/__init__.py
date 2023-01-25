@@ -136,6 +136,7 @@ if __name__ == '__main__':
     dataset = SongDataset("../test.hdf5", mel_spectrogram, sampleRate=SAMPLE_RATE)
     collate_fn = GuitarCollater(dataset.pad_token)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE,collate_fn=collate_fn)
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=dataset.pad_token)
     data_iter = iter(loader)
     spectrogram, tuningAndArrangement, tokens = next(data_iter)
     model = GuitarModel((BATCH_SIZE, 2, 128, 87),
@@ -150,8 +151,10 @@ if __name__ == '__main__':
     y_expected = tokens[:, 1:]
     target_mask, token_padding_mask = model.create_masks(y_input)
     output = model.forward(spectrogram, tuningAndArrangement, y_input, target_mask, token_padding_mask)
+    output = output.permute(1, 2, 0)
+    loss = loss_fn(output, y_expected)
     print(output.shape)
-
+    print(loss)
     total_params = sum(
         param.numel() for param in model.parameters()
     )

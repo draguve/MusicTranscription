@@ -45,7 +45,7 @@ class SongDataset(Dataset):
             waveform = torchaudio.functional.resample(waveform, orig_freq=file_sample_rate, new_freq=self.sample_rate)
         output = self.transformation(waveform)
         # padding = torch.full((self.maxTokens - len(songGroup["tokens"][sectionIndex]),), int(self.pad_token))
-        tokens = torch.from_numpy(songGroup["tokens"][sectionIndex])
+        tokens = torch.from_numpy(songGroup["tokens"][sectionIndex]).type(torch.LongTensor)
         # tokens = torch.cat((tokens, padding), )
         # print(output.shape)
         tuning = torch.Tensor(songGroup["tuning"][0:])
