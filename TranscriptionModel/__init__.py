@@ -46,8 +46,10 @@ class GuitarModel(nn.Module):
                  multi_head_attention_size: int,
                  tgt_vocab_size: int,
                  dim_feedforward: int = 512,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1,
+                 pad_token: int = 6873):
         super(GuitarModel, self).__init__()
+        self.pad_token = pad_token
         self.dropout = nn.Dropout(dropout)
         self.dropout2d = nn.Dropout1d(dropout)
         self.conv = nn.Conv2d(
@@ -60,7 +62,7 @@ class GuitarModel(nn.Module):
             kernel_size=(2, 2),
             stride=(2, 2)
         )
-        
+
         output_shape = torchshape.tensorshape(self.conv, input_shape)
         output_shape = torchshape.tensorshape(self.maxPool, output_shape)
 
@@ -84,7 +86,7 @@ class GuitarModel(nn.Module):
         )
         self.generator = nn.Linear(emb_size, tgt_vocab_size)
 
-    def forward(self, x, tuningAndArrangement, tgt, tgt_mask, tgt_pad_mask):
+    def forward(self, x, tuning, tgt, tgt_mask, tgt_pad_mask):
         # current shape = (batch,2,128,87)
         x = self.conv(x)
         x = self.gelu(x)
@@ -95,8 +97,8 @@ class GuitarModel(nn.Module):
         x = x.permute(2, 1, 0)  # convert shape to (batch,87-conv_kernel_size,post_conv*chan)
 
         # create shape of tuning to (batch,seq_len,8)
-        tuningAndArrangement = tuningAndArrangement.unsqueeze(1).repeat(1, self.tuning_seq_len, 1)
-        x = torch.cat((x, tuningAndArrangement), 2)  # convert shape of to (batch,87-conv_kernel_size,post_conv*chan+8)
+        tuning = tuning.unsqueeze(1).repeat(1, self.tuning_seq_len, 1)
+        x = torch.cat((x, tuning), 2)  # convert shape of to (batch,87-conv_kernel_size,post_conv*chan+8)
 
         x = self.fc1(x)
         # current input shape = (batch_size, sequence length, dim_model)
@@ -108,11 +110,15 @@ class GuitarModel(nn.Module):
         tgt = self.positionalEncoding(tgt)
         tgt = tgt.permute(1, 0, 2)  # to get the shape (sequence length, batch_size, dim_model),
 
-        tgt_mask = tgt_mask.repeat(self.numHeads, 1, 1)  # multiply mask with n heads for some reason
-
+        # all the tgt_masks are the same, removed extra dimensions
         x = self.transformer(x, tgt, tgt_mask=tgt_mask, tgt_key_padding_mask=tgt_pad_mask)
         x = self.generator(x)
         return x
+
+    def create_masks(self, tgt_tokens):
+        token_padding_mask = (tgt_tokens == self.pad_token)
+        target_mask = torch.nn.Transformer.generate_square_subsequent_mask(tgt_tokens.size(1))
+        return target_mask, token_padding_mask
 
 
 if __name__ == '__main__':
@@ -127,15 +133,19 @@ if __name__ == '__main__':
     dataset = SongDataset("../test.hdf5", mel_spectrogram, sampleRate=SAMPLE_RATE)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE)
     data_iter = iter(loader)
-    spectrogram, tuningAndArrangement, tokens, token_padding_mask, target_mask = next(data_iter)
+    spectrogram, tuningAndArrangement, tokens = next(data_iter)
     model = GuitarModel((BATCH_SIZE, 2, 128, 87),
                         emb_size=512,
                         num_encoder_layers=3,
                         num_decoder_layers=3,
                         multi_head_attention_size=4,
                         dim_feedforward=512,
-                        tgt_vocab_size=dataset.vocabSize)
-    output = model.forward(spectrogram, tuningAndArrangement, tokens, target_mask, token_padding_mask)
+                        tgt_vocab_size=dataset.vocabSize,
+                        pad_token=dataset.pad_token)
+    y_input = tokens[:, :-1]
+    y_expected = tokens[:, 1:]
+    target_mask, token_padding_mask = model.create_masks(y_input)
+    output = model.forward(spectrogram, tuningAndArrangement, y_input, target_mask, token_padding_mask)
     print(output.shape)
 
     total_params = sum(

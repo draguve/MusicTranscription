@@ -53,7 +53,7 @@ class SongDataset(Dataset):
         # TODO create masks here
         token_padding_mask = (tokens == self.pad_token)
         target_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.maxTokens)
-        return output, tuningAndArrangement, tokens, token_padding_mask, target_mask
+        return output, tuningAndArrangement, tokens
 
     def __len__(self):
         return self.size
