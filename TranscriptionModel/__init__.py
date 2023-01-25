@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 import torchshape
 import math
 
-from SongDataset import SongDataset
+from SongDataset import SongDataset, GuitarCollater
 
 
 class PositionalEncoding(nn.Module):
@@ -51,7 +51,7 @@ class GuitarModel(nn.Module):
         super(GuitarModel, self).__init__()
         self.pad_token = pad_token
         self.dropout = nn.Dropout(dropout)
-        self.dropout2d = nn.Dropout1d(dropout)
+        self.dropout2 = nn.Dropout(dropout)
         self.conv = nn.Conv2d(
             in_channels=2,
             out_channels=10,
@@ -70,7 +70,7 @@ class GuitarModel(nn.Module):
         self.fc1 = nn.Linear(in_features=output_shape[1] * output_shape[2] + 8, out_features=emb_size)
         self.tuning_seq_len = output_shape[3]
 
-        self.relu4 = nn.GELU()
+        self.gelu2 = nn.GELU()
 
         # Token Embedding for the target/guitar tokens
         self.tgt_embedding = TokenEmbedding(tgt_vocab_size, emb_size)  # the sqrt is done inside the forward pass
@@ -91,6 +91,7 @@ class GuitarModel(nn.Module):
         x = self.conv(x)
         x = self.gelu(x)
         x = self.maxPool(x)
+        x = self.dropout(x)
 
         x = x.permute(1, 2, 3, 0)  # convert shape to (chan,128,87,batch)
         x = x.view((-1, *x.shape[2:]))  # convert shape to (post_conv*chan,87-conv_kernel_size,batch)
@@ -101,6 +102,8 @@ class GuitarModel(nn.Module):
         x = torch.cat((x, tuning), 2)  # convert shape of to (batch,87-conv_kernel_size,post_conv*chan+8)
 
         x = self.fc1(x)
+        x = self.gelu2(x)
+        x = self.dropout2(x)
         # current input shape = (batch_size, sequence length, dim_model)
         x = self.positionalEncoding(x)
         x = x.permute(1, 0, 2)  # current input shape = (sequence length,batch_size, dim_model)
@@ -131,7 +134,8 @@ if __name__ == '__main__':
         n_mels=128
     )
     dataset = SongDataset("../test.hdf5", mel_spectrogram, sampleRate=SAMPLE_RATE)
-    loader = DataLoader(dataset, batch_size=BATCH_SIZE)
+    collate_fn = GuitarCollater(dataset.pad_token)
+    loader = DataLoader(dataset, batch_size=BATCH_SIZE,collate_fn=collate_fn)
     data_iter = iter(loader)
     spectrogram, tuningAndArrangement, tokens = next(data_iter)
     model = GuitarModel((BATCH_SIZE, 2, 128, 87),

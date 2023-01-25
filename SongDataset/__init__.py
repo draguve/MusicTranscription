@@ -5,6 +5,7 @@ import torch
 import torchaudio
 from sortedcontainers import SortedDict
 from torch.utils.data import Dataset, DataLoader
+from torch.nn.utils.rnn import pad_sequence
 
 
 class SongDataset(Dataset):
@@ -43,20 +44,28 @@ class SongDataset(Dataset):
         if sample_rate != self.sample_rate:
             waveform = torchaudio.functional.resample(waveform, orig_freq=file_sample_rate, new_freq=self.sample_rate)
         output = self.transformation(waveform)
-        padding = torch.full((self.maxTokens - len(songGroup["tokens"][sectionIndex]),), int(self.pad_token))
+        # padding = torch.full((self.maxTokens - len(songGroup["tokens"][sectionIndex]),), int(self.pad_token))
         tokens = torch.from_numpy(songGroup["tokens"][sectionIndex])
-        tokens = torch.cat((tokens, padding), )
+        # tokens = torch.cat((tokens, padding), )
         # print(output.shape)
         tuning = torch.Tensor(songGroup["tuning"][0:])
         tuningAndArrangement = torch.cat((tuning, torch.Tensor([songGroup.attrs["arrangementIndex"]]),
                                           torch.Tensor([float(songGroup.attrs["capo"])])))
-        # TODO create masks here
-        token_padding_mask = (tokens == self.pad_token)
-        target_mask = torch.nn.Transformer.generate_square_subsequent_mask(self.maxTokens)
         return output, tuningAndArrangement, tokens
 
     def __len__(self):
         return self.size
+
+
+class GuitarCollater(object):
+    def __init__(self, pad_token):
+        self.pad_toke = pad_token
+
+    def __call__(self, batch):
+        spec_batch = torch.stack([d[0] for d in batch])
+        tuning_batch = torch.stack([d[1] for d in batch])
+        padded_tokens = pad_sequence([d[2] for d in batch], padding_value=self.pad_toke)
+        return spec_batch, tuning_batch, padded_tokens.permute(1, 0)
 
 
 SAMPLE_RATE = 44100
