@@ -36,11 +36,16 @@ class SongDataset(Dataset):
         songsGroup = h5file["Songs"]
         songGroup = songsGroup[song["group"]]
         # print(song)
-        file_sample_rate = torchaudio.info(song["ogg"]).sample_rate
+        info = torchaudio.info(song["ogg"])
+        file_sample_rate = info.sample_rate
         file_start_offset = int(songGroup["startSeconds"][sectionIndex] * file_sample_rate)
         file_number_samples_to_read = int(self.spectrogramSizeInSeconds * file_sample_rate)
         waveform, sample_rate = torchaudio.load(song["ogg"], normalize=True, frame_offset=file_start_offset,
                                                 num_frames=file_number_samples_to_read)
+        if waveform.size(1) != file_number_samples_to_read:
+            # print(song, index, sectionIndex)
+            return None, None, None
+            # raise Exception("Read Less than expected")
         if sample_rate != self.sample_rate:
             waveform = torchaudio.functional.resample(waveform, orig_freq=file_sample_rate, new_freq=self.sample_rate)
         output = self.transformation(waveform)
@@ -62,9 +67,10 @@ class GuitarCollater(object):
         self.pad_toke = pad_token
 
     def __call__(self, batch):
-        spec_batch = torch.stack([d[0] for d in batch])
-        tuning_batch = torch.stack([d[1] for d in batch])
-        padded_tokens = pad_sequence([d[2] for d in batch], padding_value=self.pad_toke)
+        batch_filter = list(filter(lambda x: x[0] is not None, batch))
+        spec_batch = torch.stack([d[0] for d in batch_filter])
+        tuning_batch = torch.stack([d[1] for d in batch_filter])
+        padded_tokens = pad_sequence([d[2] for d in batch_filter], padding_value=self.pad_toke)
         return spec_batch, tuning_batch, padded_tokens.permute(1, 0)
 
 
@@ -78,7 +84,7 @@ if __name__ == '__main__':
         n_mels=128
     )
     dataset = SongDataset("../test.hdf5", mel_spectrogram, sampleRate=SAMPLE_RATE)
-    print(dataset[203])
+    print(dataset[277][0].shape)
     # loader = DataLoader(dataset=dataset, batch_size=4, shuffle=True, num_workers=4)
     # dataiter = iter(loader)
     # check = next(dataiter)

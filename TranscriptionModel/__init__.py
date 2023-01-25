@@ -126,7 +126,7 @@ class GuitarModel(nn.Module):
 
 if __name__ == '__main__':
     SAMPLE_RATE = 44100
-    BATCH_SIZE = 10
+    BATCH_SIZE = 1024
     mel_spectrogram = torchaudio.transforms.MelSpectrogram(
         sample_rate=SAMPLE_RATE,
         n_fft=2048,
