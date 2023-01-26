@@ -1,12 +1,14 @@
+import json
+
+import h5py
+import numpy as np
+import sortedcontainers
+from tqdm import tqdm
+
+from SongDataset.ArrangementUtils import arrangementIndex
 from TUtils import get_all_dlc_files
 from Tokenizer import GuitarTokenizer
-import h5py
 from Tokenizer import SongXMLParser
-from pprint import pprint
-import json
-import sortedcontainers
-import numpy as np
-from tqdm import tqdm
 
 SpectrogramSizeInSeconds = 1.0
 NumberOfTimeTokensPerSecond = 1000
@@ -15,9 +17,6 @@ maxNumberOfTokens = 0
 
 toRemoveForStore = ["notes", "chords", "ebeats", "chordTemplates", "phraseIterations", "sections", "anchors",
                     "handShapes"]
-
-arrangementsToConvert = ["lead", "lead2", "lead3", "rhythm", "rhythm2", "rhythm3"]
-arrangementIndex = {x: index - (len(arrangementsToConvert) / 2) for index, x in enumerate(arrangementsToConvert)}
 
 
 def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, fileLocations):

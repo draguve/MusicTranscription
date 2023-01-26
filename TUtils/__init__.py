@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+import string
+import random
 
 
 def get_all_dlc_files(directory):
@@ -18,3 +20,7 @@ def get_all_dlc_files(directory):
                     dlc["rs2dlc"] = os.path.abspath(str(rs2_file))
                 data.append(dlc)
     return data
+
+
+def random_string(length=15):
+    return ''.join(random.choices(string.ascii_letters, k=length))

@@ -152,6 +152,8 @@ class GuitarTokenizer:
             silenceEventHandler,
             endOfSequenceEventHandler,
         ])
+        self.sosToken = self._encoder.encode(*createStartOfSeqEvent())
+        self.eosToken = self._encoder.encode(*createEndOfSeqEvent())
 
     def numberOfTokens(self) -> int:
         return self._encoder.numberOfTokens

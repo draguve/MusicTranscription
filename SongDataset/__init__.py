@@ -84,7 +84,7 @@ if __name__ == '__main__':
         n_mels=128
     )
     dataset = SongDataset("../test.hdf5", mel_spectrogram, sampleRate=SAMPLE_RATE)
-    print(dataset[277][0].shape)
+    print(dataset[277])
     # loader = DataLoader(dataset=dataset, batch_size=4, shuffle=True, num_workers=4)
     # dataiter = iter(loader)
     # check = next(dataiter)
