@@ -9,8 +9,8 @@ def getTuning(offsets: list[int]):
     return torch.Tensor(offsets)
 
 
-def getArrangementTensor(tuning: torch.tensor, arrangement: str, capo: float):
-    torch.cat((tuning, torch.Tensor(arrangementIndex[arrangement]),
+def getArrangementTensor(tuning: torch.tensor, arrangement: str, capo: float) -> torch.tensor:
+    return torch.cat((tuning, torch.Tensor([arrangementIndex[arrangement]]),
                torch.Tensor([float(capo)])))
 
 

@@ -142,7 +142,7 @@ class GuitarTokenizer:
             "time",
             [generateTimeRange(numberOfSeconds, timeStepsPerSecond)]
         )
-        self._encoder = Encoder([
+        self.encoder = Encoder([
             startOfSequenceEventHandler,
             self._timeEventHandler,
             noteStartEventHandler,
@@ -152,11 +152,11 @@ class GuitarTokenizer:
             silenceEventHandler,
             endOfSequenceEventHandler,
         ])
-        self.sosToken = self._encoder.encode(*createStartOfSeqEvent())
-        self.eosToken = self._encoder.encode(*createEndOfSeqEvent())
+        self.sosToken = self.encoder.encode(*createStartOfSeqEvent())
+        self.eosToken = self.encoder.encode(*createEndOfSeqEvent())
 
     def numberOfTokens(self) -> int:
-        return self._encoder.numberOfTokens
+        return self.encoder.numberOfTokens
 
     def processAndAddNote(self, sortedEvents, n):
         note: dict = n
@@ -259,37 +259,37 @@ class GuitarTokenizer:
             startLocation = sortedEvents.bisect_left(startTime)
             endLocation = sortedEvents.bisect_right(stopTime) - 1
 
-            tokens = [self._encoder.encode(*createStartOfSeqEvent())]
+            tokens = [self.encoder.encode(*createStartOfSeqEvent())]
 
             # add all already open notes
             for noteData in lastOpenNotes:
                 if noteData is not None:
-                    tokens.append(self._encoder.encode("noteStart", noteData))
-            tokens.append(self._encoder.encode(*createEndOfTieEvent()))
+                    tokens.append(self.encoder.encode("noteStart", noteData))
+            tokens.append(self.encoder.encode(*createEndOfTieEvent()))
 
             for i in range(startLocation, endLocation + 1):
                 currentTime = sortedEventsAsList[i]
 
                 # emit time start token
-                tokens.append(self._encoder.encode(*createTimeEvent(currentTime - startTime)))
+                tokens.append(self.encoder.encode(*createTimeEvent(currentTime - startTime)))
 
                 # bend if any first
                 for event in sortedEvents[currentTime]["bend"]:
-                    tokens.append(self._encoder.encode(*event))
+                    tokens.append(self.encoder.encode(*event))
                 # end notes
                 for event in sortedEvents[currentTime]["end"]:
                     lastOpenNotes[event[2]] = None
-                    tokens.append(self._encoder.encode(*event))
+                    tokens.append(self.encoder.encode(*event))
 
                 # then write all new notes
                 for event in sortedEvents[currentTime]["start"]:
-                    tokens.append(self._encoder.encode(*event))
+                    tokens.append(self.encoder.encode(*event))
                     lastOpenNotes[event[2]] = event[1]
 
             # check for silence
             if len(tokens) == 2:
-                tokens.append(self._encoder.encode(*createSilenceEvent()))
-            tokens.append(self._encoder.encode(*createEndOfSeqEvent()))
+                tokens.append(self.encoder.encode(*createSilenceEvent()))
+            tokens.append(self.encoder.encode(*createEndOfSeqEvent()))
             sections.append(SongSection(startTime, stopTime, tokens))
 
         # for section in sections:

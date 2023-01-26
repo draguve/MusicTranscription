@@ -126,7 +126,7 @@ class GuitarModel(nn.Module):
 
 if __name__ == '__main__':
     SAMPLE_RATE = 44100
-    BATCH_SIZE = 1024
+    BATCH_SIZE = 64
     mel_spectrogram = torchaudio.transforms.MelSpectrogram(
         sample_rate=SAMPLE_RATE,
         n_fft=2048,
@@ -150,11 +150,16 @@ if __name__ == '__main__':
     y_input = tokens[:, :-1]
     y_expected = tokens[:, 1:]
     target_mask, token_padding_mask = model.create_masks(y_input)
+    print(spectrogram.shape)
+    print(tuningAndArrangement.shape)
+    print(y_input.shape)
+    print(target_mask.shape)
+    print(token_padding_mask.shape)
     output = model.forward(spectrogram, tuningAndArrangement, y_input, target_mask, token_padding_mask)
     output = output.permute(1, 2, 0)
-    loss = loss_fn(output, y_expected)
+    # loss = loss_fn(output, y_expected)
     print(output.shape)
-    print(loss)
+    # print(loss)
     total_params = sum(
         param.numel() for param in model.parameters()
     )
