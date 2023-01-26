@@ -12,6 +12,7 @@ from Tokenizer import SongXMLParser
 
 SpectrogramSizeInSeconds = 1.0
 NumberOfTimeTokensPerSecond = 1000
+remove_all_silence = True
 
 maxNumberOfTokens = 0
 
@@ -25,6 +26,8 @@ def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, 
     group_name = f"{dlcKey}_{typeOfArrangement}"
     songGroup = songGroup.create_group(group_name)
     songSections = guitarTokenizer.convertSongFromParsedFile(parsedSong)
+    if remove_all_silence:
+        songSections = list(filter(lambda section: len(section.tokens) > 4, songSections))
     numberOfSection = len(songSections)
     startSections = np.array([section.startSeconds for section in songSections])
     endSections = np.array([section.stopSeconds for section in songSections])
