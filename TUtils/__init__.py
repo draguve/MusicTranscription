@@ -22,5 +22,9 @@ def get_all_dlc_files(directory):
     return data
 
 
+def clamp(my_value, min_value, max_value):
+    return max(min(my_value, max_value), min_value)
+
+
 def random_string(length=15):
     return ''.join(random.choices(string.ascii_letters, k=length))

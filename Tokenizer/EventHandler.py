@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 import math
+
+from TUtils import clamp
 from Tokenizer.lerp import *
 import numpy as np
 
@@ -20,7 +22,7 @@ class EventVariable:
         return self._numberOfTokens
 
     def encode(self, value):
-        assert (self.eventStartRange <= value <= self.eventEndRange)
+        value = clamp(value,self.eventStartRange,self.eventEndRange)
         return round(remap(self.eventStartRange, self.eventEndRange, 0, self.numberOfTokens - 1, value))
 
     def decode(self, value):

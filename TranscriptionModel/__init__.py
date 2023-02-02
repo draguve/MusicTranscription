@@ -40,6 +40,7 @@ class TokenEmbedding(nn.Module):
 
 class GuitarModel(nn.Module):
     def __init__(self, input_shape,
+                 transformation,
                  num_encoder_layers: int,
                  num_decoder_layers: int,
                  emb_size: int,
@@ -62,6 +63,7 @@ class GuitarModel(nn.Module):
             kernel_size=(2, 2),
             stride=(2, 2)
         )
+        self.transformation = transformation
 
         output_shape = torchshape.tensorshape(self.conv, input_shape)
         output_shape = torchshape.tensorshape(self.maxPool, output_shape)
@@ -87,6 +89,7 @@ class GuitarModel(nn.Module):
         self.generator = nn.Linear(emb_size, tgt_vocab_size)
 
     def forward(self, x, tuning, tgt, tgt_mask, tgt_pad_mask):
+        x = self.transformation(x)
         # current shape = (batch,2,128,87)
         x = self.conv(x)
         x = self.gelu(x)
@@ -133,13 +136,14 @@ if __name__ == '__main__':
         hop_length=512,
         n_mels=128
     )
-    dataset = SongDataset("../test.hdf5", mel_spectrogram, sampleRate=SAMPLE_RATE)
+    dataset = SongDataset("../Trainsets/massive_test.hdf5", sampleRate=SAMPLE_RATE)
     collate_fn = GuitarCollater(dataset.pad_token)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE,collate_fn=collate_fn)
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=dataset.pad_token)
     data_iter = iter(loader)
     spectrogram, tuningAndArrangement, tokens = next(data_iter)
     model = GuitarModel((BATCH_SIZE, 2, 128, 87),
+                        transformation=mel_spectrogram,
                         emb_size=512,
                         num_encoder_layers=3,
                         num_decoder_layers=3,

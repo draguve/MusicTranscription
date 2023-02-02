@@ -9,7 +9,7 @@ from torch.nn.utils.rnn import pad_sequence
 
 
 class SongDataset(Dataset):
-    def __init__(self, filename, transformation, sampleRate=44100):
+    def __init__(self, filename, sampleRate=44100):
         self.filename = filename
         h5file = h5py.File(self.filename, "r")
         songsGroup = h5file["Songs"]
@@ -25,7 +25,6 @@ class SongDataset(Dataset):
         for key in data.keys():
             self.sortedIndex[int(key)] = data[key]
         self.sortedKeys = self.sortedIndex.keys()
-        self.transformation = transformation
 
     def __getitem__(self, index):
         songIndex = self.sortedKeys[self.sortedIndex.bisect_right(index) - 1]
@@ -48,7 +47,7 @@ class SongDataset(Dataset):
             # raise Exception("Read Less than expected")
         if sample_rate != self.sample_rate:
             waveform = torchaudio.functional.resample(waveform, orig_freq=file_sample_rate, new_freq=self.sample_rate)
-        output = self.transformation(waveform)
+        # output = self.transformation(waveform)
         # padding = torch.full((self.maxTokens - len(songGroup["tokens"][sectionIndex]),), int(self.pad_token))
         tokens = torch.from_numpy(songGroup["tokens"][sectionIndex]).type(torch.LongTensor)
         # tokens = torch.cat((tokens, padding), )
@@ -56,7 +55,7 @@ class SongDataset(Dataset):
         tuning = torch.Tensor(songGroup["tuning"][0:])
         tuningAndArrangement = torch.cat((tuning, torch.Tensor([songGroup.attrs["arrangementIndex"]]),
                                           torch.Tensor([float(songGroup.attrs["capo"])])))
-        return output, tuningAndArrangement, tokens
+        return waveform, tuningAndArrangement, tokens
 
     def __len__(self):
         return self.size
@@ -83,8 +82,8 @@ if __name__ == '__main__':
         hop_length=512,
         n_mels=128
     )
-    dataset = SongDataset("../test.hdf5", mel_spectrogram, sampleRate=SAMPLE_RATE)
-    print(dataset[277])
+    dataset = SongDataset("../Trainsets/massive_test.hdf5", sampleRate=SAMPLE_RATE)
+    print(dataset[0])
     # loader = DataLoader(dataset=dataset, batch_size=4, shuffle=True, num_workers=4)
     # dataiter = iter(loader)
     # check = next(dataiter)

@@ -395,7 +395,7 @@ poetry.toml
 
 # End of https://www.toptal.com/developers/gitignore/api/jetbrains+all,node,python
 links*.json
-Downloads/
+Downloads*/
 .fleet/
 Misc/
 

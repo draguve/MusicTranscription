@@ -9,6 +9,7 @@ from SongDataset.ArrangementUtils import arrangementIndex
 from TUtils import get_all_dlc_files
 from Tokenizer import GuitarTokenizer
 from Tokenizer import SongXMLParser
+from TUtils import random_string
 
 SpectrogramSizeInSeconds = 1.0
 NumberOfTimeTokensPerSecond = 1000
@@ -23,7 +24,8 @@ toRemoveForStore = ["notes", "chords", "ebeats", "chordTemplates", "phraseIterat
 def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, fileLocations):
     global maxNumberOfTokens
     parsedSong = SongXMLParser.parse_xml_file(fileLocations[typeOfArrangement])
-    group_name = f"{dlcKey}_{typeOfArrangement}"
+    random_id = random_string(10)
+    group_name = f"{dlcKey}_{typeOfArrangement}_{random_id}"
     songGroup = songGroup.create_group(group_name)
     songSections = guitarTokenizer.convertSongFromParsedFile(parsedSong)
     if remove_all_silence:
@@ -57,16 +59,22 @@ def store_dlc(lastAdded, dlcKey, songGroup, guitarTokenizer, typeOfArrangement, 
 if __name__ == '__main__':
     sortedDlcs = sortedcontainers.SortedDict()
     last_added = 0
-    dlcs = get_all_dlc_files("Downloads")
+    dlcs = get_all_dlc_files(r"Downloads")
     tokenizer = GuitarTokenizer(SpectrogramSizeInSeconds, NumberOfTimeTokensPerSecond)
     # creating a file
-    with h5py.File('test.hdf5', 'w') as f:
+    with h5py.File('massive_test.hdf5', 'w') as f:
         songs = f.create_group("Songs")
-        pbar = tqdm(total=len(dlcs))
-        for dlc in dlcs:
-            with open(dlc["rs2dlc"]) as user_file:
-                parsed_json = json.load(user_file)
-                DLCKey = parsed_json["DLCKey"]
+        pbar = tqdm(total=len(dlcs[0:1000]))
+        for dlc in dlcs[0:1000]:
+            if "rs2dlc" in dlc:
+                with open(dlc["rs2dlc"]) as user_file:
+                    parsed_json = json.load(user_file)
+                    DLCKey = parsed_json["DLCKey"]
+                    for key in dlc:
+                        if key in arrangementIndex:
+                            last_added += store_dlc(last_added, DLCKey, songs, tokenizer, key, dlc)
+            else:
+                DLCKey = random_string(20)
                 for key in dlc:
                     if key in arrangementIndex:
                         last_added += store_dlc(last_added, DLCKey, songs, tokenizer, key, dlc)
