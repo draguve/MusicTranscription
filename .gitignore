@@ -415,6 +415,8 @@ profile_default/
 ipython_config.py
 runs/
 wandb/
+model_weights/
+Trainsets/
 
 # Remove previous ipynb_checkpoints
 #   git rm -r .ipynb_checkpoints/

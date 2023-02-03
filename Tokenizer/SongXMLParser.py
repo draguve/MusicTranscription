@@ -30,7 +30,7 @@ def parse_showlights(xml_path):
 
 
 def parse_xml_file(xml_path):
-    with open(xml_path, 'r') as f:
+    with open(xml_path, 'r', errors='replace') as f:
         data = f.read()
         bs_data = bs4.BeautifulSoup(data, 'xml')
         xml_data = {"title": bs_data.find("title").string, "tuning": bs_data.find("tuning").attrs,

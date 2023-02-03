@@ -136,7 +136,7 @@ if __name__ == '__main__':
         hop_length=512,
         n_mels=128
     )
-    dataset = SongDataset("../Trainsets/massive_test.hdf5", sampleRate=SAMPLE_RATE)
+    dataset = SongDataset("../massive.hdf5", sampleRate=SAMPLE_RATE)
     collate_fn = GuitarCollater(dataset.pad_token)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE,collate_fn=collate_fn)
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=dataset.pad_token)
