@@ -44,6 +44,8 @@ class SongDataset(Dataset):
         if waveform.size(1) != file_number_samples_to_read:
             # print(song, index, sectionIndex)
             return None, None, None
+        if waveform.size(0) != 2:
+            return None, None, None
             # raise Exception("Read Less than expected")
         if sample_rate != self.sample_rate:
             waveform = torchaudio.functional.resample(waveform, orig_freq=file_sample_rate, new_freq=self.sample_rate)
