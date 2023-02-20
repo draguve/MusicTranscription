@@ -87,7 +87,7 @@ if __name__ == '__main__':
     dlcs = get_all_dlc_files(r"Downloads2")
     tokenizer = GuitarTokenizer(SpectrogramSizeInSeconds, NumberOfTimeTokensPerSecond)
     # creating a file
-    with h5py.File('massive.hdf5', 'w') as f:
+    with h5py.File('massive-test.hdf5', 'w') as f:
 
         delayed_fucs = []
         for dlc in dlcs:

@@ -136,7 +136,7 @@ if __name__ == '__main__':
         hop_length=512,
         n_mels=128
     )
-    dataset = SongDataset("../massive.hdf5", sampleRate=SAMPLE_RATE)
+    dataset = SongDataset("../Trainsets/massive.hdf5", sampleRate=SAMPLE_RATE)
     collate_fn = GuitarCollater(dataset.pad_token)
     loader = DataLoader(dataset, batch_size=BATCH_SIZE,collate_fn=collate_fn)
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=dataset.pad_token)
@@ -160,6 +160,12 @@ if __name__ == '__main__':
     print(target_mask.shape)
     print(token_padding_mask.shape)
     output = model.forward(spectrogram, tuningAndArrangement, y_input, target_mask, token_padding_mask)
+    p = torch.nn.functional.softmax(output, dim=2)
+    print(f"{p.shape} {torch.argmax(p,dim=2,keepdim=True).squeeze(-1).shape} test")
+    max_prob = torch.argmax(p,dim=2,keepdim=True).squeeze(-1)
+    one_hot = torch.nn.functional.one_hot(max_prob, num_classes=dataset.vocabSize)
+    print(f"one_hot {one_hot.shape}")
+    print(one_hot)
     output = output.permute(1, 2, 0)
     # loss = loss_fn(output, y_expected)
     print(output.shape)
