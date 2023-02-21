@@ -71,8 +71,11 @@ class GuitarCollater(object):
         batch_filter = list(filter(lambda x: x[0] is not None, batch))
         spec_batch = torch.stack([d[0] for d in batch_filter])
         tuning_batch = torch.stack([d[1] for d in batch_filter])
-        padded_tokens = pad_sequence([d[2] for d in batch_filter], padding_value=self.pad_toke)
-        return spec_batch, tuning_batch, padded_tokens.permute(1, 0)
+        padded_tokens = pad_sequence([d[2] for d in batch_filter], padding_value=self.pad_toke).permute(1, 0)
+        expected_output = torch.nn.functional.one_hot(padded_tokens[:, 1:], num_classes=self.pad_toke + 1)
+        expected_output = expected_output.permute(1, 0, 2)
+        expected_output = expected_output.type(torch.float)
+        return spec_batch, tuning_batch, padded_tokens, expected_output
 
 
 SAMPLE_RATE = 44100
@@ -85,7 +88,11 @@ if __name__ == '__main__':
         n_mels=128
     )
     dataset = SongDataset("../Trainsets/massive_test.hdf5", sampleRate=SAMPLE_RATE)
-    print(dataset[0])
+    collate_fn = GuitarCollater(dataset.pad_token)
+    train_dataloader = DataLoader(dataset, batch_size=4, shuffle=True, collate_fn=collate_fn)
+    for spec_batch, tuning_batch, padded_tokens, expected_output in train_dataloader:
+        print(spec_batch.shape, tuning_batch.shape, padded_tokens.shape, expected_output.shape)
+        break
     # loader = DataLoader(dataset=dataset, batch_size=4, shuffle=True, num_workers=4)
     # dataiter = iter(loader)
     # check = next(dataiter)
