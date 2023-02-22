@@ -231,7 +231,6 @@ class GuitarTokenizer:
         loadedFile = parse_xml_file(path)
         return self.convertSongFromParsedFile(loadedFile)
 
-    # TODO: need to pay attention to the capo
     def convertSongFromParsedFile(self, loadedFile):
         sortedEvents = sortedcontainers.SortedDict()
 
