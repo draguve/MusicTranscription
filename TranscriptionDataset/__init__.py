@@ -25,6 +25,9 @@ class SongDataset(IterableDataset):
         self.maxTokens = None
         self.filename = filename
         self.sample_rate = sampleRate
+        worker_info = torch.utils.data.get_worker_info()
+        if worker_info is None:
+            self.start()
 
     def start(self):
         h5file = h5py.File(self.filename, "r")
