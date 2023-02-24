@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 import torchshape
 import math
 
-from SongDataset import SongDataset, GuitarCollater
+from TranscriptionDataset import SongDataset
 
 
 class PositionalEncoding(nn.Module):

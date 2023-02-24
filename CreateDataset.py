@@ -6,7 +6,7 @@ import numpy as np
 import sortedcontainers
 from tqdm import tqdm
 
-from SongDataset.ArrangementUtils import arrangementIndex
+from TUtils.ArrangementUtils import arrangementIndex,arrangementsToConvert
 from TUtils import get_all_dlc_files, tqdm_joblib
 from Tokenizer import GuitarTokenizer
 from Tokenizer import SongXMLParser
@@ -15,7 +15,7 @@ from TUtils import random_string
 SpectrogramSizeInSeconds = 1.0
 NumberOfTimeTokensPerSecond = 1000
 remove_all_silence = True
-from joblib import Parallel, delayed
+from joblib import delayed
 
 toRemoveForStore = ["notes", "chords", "ebeats", "chordTemplates", "phraseIterations", "sections", "anchors",
                     "handShapes"]
@@ -47,6 +47,8 @@ def store_dlc(guitarTokenizer, typeOfArrangement, fileLocations):
         songGroup["attrs"] = {}
 
         songGroup["attrs"]["arrangementIndex"] = arrangementIndex[typeOfArrangement]
+        songGroup["attrs"]["arrangement"] = typeOfArrangement
+        songGroup["attrs"]["allArrangements"] = np.intersect1d(arrangementsToConvert,list(fileLocations.keys())).tolist()
         # dt = h5py.vlen_dtype(np.dtype('int32'))
         # tokensStore = songGroup.create_dataset("tokens", len(startSections), dtype=dt)
         # for i in range(len(startSections)):
@@ -87,7 +89,7 @@ if __name__ == '__main__':
     dlcs = get_all_dlc_files(r"Downloads")
     tokenizer = GuitarTokenizer(SpectrogramSizeInSeconds, NumberOfTimeTokensPerSecond)
     # creating a file
-    with h5py.File('Trainsets/massive_test.hdf5', 'w') as f:
+    with h5py.File('Trainsets/massive_test2.hdf5', 'w') as f:
 
         delayed_fucs = []
         for dlc in dlcs:
