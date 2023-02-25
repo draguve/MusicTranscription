@@ -34,8 +34,8 @@ class TuningModel(LightningModule):
         self.conv4 = nn.Conv1d(70, 70, kernel_size=3)
         self.bn4 = nn.BatchNorm1d(70)
         self.pool4 = nn.MaxPool1d(4)
-        self.fcTuning = nn.Linear(70, tuning_size)
-        self.fcCapo = nn.Linear(70, capo_size)
+        # self.fcTuning = nn.Linear(70, tuning_size)
+        # self.fcCapo = nn.Linear(70, capo_size)
         self.fcArrangement = nn.Linear(70, arrangement_size)
 
     def forward(self, x):
@@ -57,7 +57,7 @@ class TuningModel(LightningModule):
         # capo = self.fcCapo(x)
         arrangement = self.fcArrangement(x)
         # return F.log_softmax(tuning, dim=2), F.log_softmax(capo, dim=2), F.log_softmax(arrangement, dim=2)
-        return F.log_softmax(arrangement,dim=2)
+        return F.log_softmax(arrangement, dim=2)
 
     def configure_optimizers(self) -> Any:
         optimizer = torch.optim.Adam(self.parameters())
@@ -66,17 +66,17 @@ class TuningModel(LightningModule):
     def training_step(self, batch, batch_idx):
         section, tuning, capo, arrangement = batch
         output = self(section).squeeze()
-        loss = F.nll_loss(output, arrangement)
-        acc = (torch.argmax(output, 1) == torch.argmax(arrangement, 1)).float().mean()
+        loss = F.nll_loss(output, torch.argmax(arrangement.squeeze(), dim=1))
+        acc = (torch.argmax(output, 1) == torch.argmax(arrangement.squeeze(), 1)).float().mean()
         self.log('train_loss', loss)
         self.log('train_acc', acc)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
         section, tuning, capo, arrangement = val_batch
-        output = self(section)
-        loss = F.nll_loss(output.squeeze(), arrangement)
-        acc = (torch.argmax(output, 1) == torch.argmax(arrangement, 1)).float().mean()
+        output = self(section).squeeze()
+        loss = F.nll_loss(output, torch.argmax(arrangement.squeeze(), dim=1))
+        acc = (torch.argmax(output, 1) == torch.argmax(arrangement.squeeze(), 1)).float().mean()
         self.log('val_loss', loss)
         self.log('loss_acc', acc)
 
@@ -86,8 +86,8 @@ if __name__ == '__main__':
     dataset = "../Trainsets/massive_test2.hdf5"
     transform = ArrangementDataset.OneHotEncodeArrangement(dataset)
     dataset = ArrangementDataset.ArrangementDataset(dataset, sampleRate=SAMPLE_RATE, oneHotTransform=transform)
-    # print(len(transform.oheTunings.active_features_))
-    #
+    dataset.start()
+    dataset.load_all_data()
     loader = DataLoader(
         dataset=dataset,
         batch_size=7,
@@ -97,10 +97,13 @@ if __name__ == '__main__':
     )  # , num_workers=4)
     dataiter = iter(loader)
     section, tuning, capo, arrangement = next(dataiter)
+    print(len(next(dataiter)))
+    print(f"{section.shape} {tuning.shape} {capo.shape} {arrangement.shape}")
     test = TuningModel(
         tuning_size=transform.tuning_output_size,
         capo_size=transform.capo_output_size,
         arrangement_size=transform.arrangement_output_size
     )
     output = test.forward(section)
+    test.training_step(next(dataiter), 0)
     pass

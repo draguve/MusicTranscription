@@ -110,7 +110,7 @@ class ArrangementDataset(IterableDataset):
             yield section, tuning, capo, arrangement
 
     def get_stream(self, list_data):
-        return chain.from_iterable(map(self.process_file, cycle(list_data)))
+        return chain.from_iterable(map(self.process_file, chain(list_data)))
 
     def __iter__(self) -> Iterator[T_co]:
         return self.get_stream(self.data)
@@ -122,7 +122,7 @@ def worker_init_fn(worker_id):
     dataset.start()
     # print(f"total {len(dataset.data)}")
     per_worker = int(math.ceil((len(dataset.data)) / float(worker_info.num_workers)))
-    dataset.data = dataset.data[worker_id * per_worker:min((worker_id+1) * per_worker, len(dataset.data))]
+    dataset.data = dataset.data[worker_id * per_worker:min((worker_id + 1) * per_worker, len(dataset.data))]
     # print(f"worker {len(dataset.data)} {worker_id}")
 
 
@@ -147,11 +147,13 @@ class ArrangementDataModule(pl.LightningDataModule):
         self.transform = OneHotEncodeArrangement(self.location)
 
     def setup(self, stage):
-        self.dataset_train = ArrangementDataset(self.location, sampleRate=self.sample_rate, oneHotTransform=self.transform)
+        self.dataset_train = ArrangementDataset(self.location, sampleRate=self.sample_rate,
+                                                oneHotTransform=self.transform)
         total_set = numpy.array(self.dataset_train.get_all_data())
         train, test = train_test_split(total_set, test_size=self.test_size)
         self.dataset_train.data = train
-        self.dataset_test = ArrangementDataset(self.location, sampleRate=self.sample_rate, oneHotTransform=self.transform)
+        self.dataset_test = ArrangementDataset(self.location, sampleRate=self.sample_rate,
+                                               oneHotTransform=self.transform)
         self.dataset_test.data = test
 
     def train_dataloader(self):
@@ -165,7 +167,6 @@ class ArrangementDataModule(pl.LightningDataModule):
             self.dataset_test.start()
         return DataLoader(self.dataset_test, batch_size=self.batch_size, num_workers=self.num_workers,
                           worker_init_fn=worker_init_fn)
-
 
 
 if __name__ == '__main__':
