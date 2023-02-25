@@ -1,4 +1,5 @@
 import json
+from typing import Any
 
 import torch
 import torchaudio
@@ -52,10 +53,32 @@ class TuningModel(LightningModule):
         x = self.pool4(x)
         x = F.avg_pool1d(x, x.shape[-1])
         x = x.permute(0, 2, 1)
-        tuning = self.fcTuning(x)
-        capo = self.fcCapo(x)
+        # tuning = self.fcTuning(x)
+        # capo = self.fcCapo(x)
         arrangement = self.fcArrangement(x)
-        return F.log_softmax(tuning, dim=2), F.log_softmax(capo, dim=2), F.log_softmax(arrangement, dim=2)
+        # return F.log_softmax(tuning, dim=2), F.log_softmax(capo, dim=2), F.log_softmax(arrangement, dim=2)
+        return F.log_softmax(arrangement,dim=2)
+
+    def configure_optimizers(self) -> Any:
+        optimizer = torch.optim.Adam(self.parameters())
+        return optimizer
+
+    def training_step(self, batch, batch_idx):
+        section, tuning, capo, arrangement = batch
+        output = self(section).squeeze()
+        loss = F.nll_loss(output, arrangement)
+        acc = (torch.argmax(output, 1) == torch.argmax(arrangement, 1)).float().mean()
+        self.log('train_loss', loss)
+        self.log('train_acc', acc)
+        return loss
+
+    def validation_step(self, val_batch, batch_idx):
+        section, tuning, capo, arrangement = val_batch
+        output = self(section)
+        loss = F.nll_loss(output.squeeze(), arrangement)
+        acc = (torch.argmax(output, 1) == torch.argmax(arrangement, 1)).float().mean()
+        self.log('val_loss', loss)
+        self.log('loss_acc', acc)
 
 
 if __name__ == '__main__':
