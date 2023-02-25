@@ -77,11 +77,6 @@ def worker_init_fn(worker_id):
 #     tuning_batch = torch.stack([d[1] for d in batch])
 #     padded_tokens = pad_sequence([d[2] for d in batch], padding_value=pad_token)
 #     return spec_batch, tuning_batch, padded_tokens.permute(1, 0)
-
-
-SAMPLE_RATE = 44100
-
-
 class OneHotEncodeArrangement(Callable):
     def __init__(self, datasetfile):
         all_tunings = {}
@@ -114,18 +109,21 @@ class OneHotEncodeArrangement(Callable):
                 all_tunings[tuning] += 1
             else:
                 all_tunings[tuning] = 1
-        print(capos.shape)
         self.oheTunings = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(tunings)
         self.oheCaps = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(capos)
         self.oheArrangements = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(arrangements)
+        self.tuning_output_size = sum(self.oheTunings._n_features_outs)
+        self.capo_output_size = sum(self.oheCaps._n_features_outs)
+        self.arrangement_output_size = sum(self.oheArrangements._n_features_outs)
 
     def __call__(self, tunings, capo, arrangement):
         return self.oheTunings.transform(np.expand_dims(tunings, 0)), self.oheCaps.transform(
             np.expand_dims(capo, 0)), self.oheArrangements.transform(np.expand_dims(arrangement, 0))
 
 
+SAMPLE_RATE = 44100
 if __name__ == '__main__':
-    dataset = "../Trainsets/massive_test2.hdf5"
+    dataset = "../Trainsets/massive.hdf5"
     transform = OneHotEncodeArrangement(dataset)
     dataset = ArrangementDataset(dataset, sampleRate=SAMPLE_RATE, oneHotTransform=transform)
     loader = DataLoader(
