@@ -105,6 +105,8 @@ class ArrangementDataset(IterableDataset):
             tuning, capo, arrangement = self.oneHotTransform(tuning, capo, arrangement)
         allSections = torch.split(waveform, self.file_number_samples_to_read, dim=1)
         for section in allSections:
+            if section.size(0) != 2:
+                continue
             if section.size(1) != self.file_number_samples_to_read:
                 section = F.pad(section, (self.file_number_samples_to_read - section.size(1), 0))
             yield section, tuning, capo, arrangement
@@ -165,13 +167,17 @@ class ArrangementDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         if self.num_workers == 0:
             self.dataset_train.start()
-        return DataLoader(self.dataset_train, batch_size=self.batch_size, num_workers=self.num_workers,
+        return DataLoader(self.dataset_train,
+                          batch_size=self.batch_size,
+                          num_workers=self.num_workers,
                           worker_init_fn=worker_init_fn)
 
     def val_dataloader(self):
         if self.num_workers == 0:
             self.dataset_val.start()
-        return DataLoader(self.dataset_val, batch_size=self.batch_size, num_workers=self.num_workers,
+        return DataLoader(self.dataset_val,
+                          batch_size=self.batch_size,
+                          num_workers=self.num_workers,
                           worker_init_fn=worker_init_fn)
 
 
@@ -184,6 +190,3 @@ if __name__ == '__main__':
     for item in dataiter:
         for elem in item:
             print(elem.shape)
-        # break
-    # check = next(dataiter)
-    # print(check)

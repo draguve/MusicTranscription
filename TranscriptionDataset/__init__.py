@@ -58,6 +58,8 @@ class SongDataset(IterableDataset):
             # skip if the number of samples is incorrect
             if allSections[indexInSection].size(1) != self.file_number_samples_to_read:
                 continue
+            if allSections[indexInSection].size(0) != 2:
+                continue
             tokens = torch.from_numpy(songGroup["tokens"][idx]).type(torch.LongTensor)
             yield allSections[indexInSection], tuningAndArrangement, tokens, self.pad_token
             # here added the pad token for the collate function, TODO: FIX THIS HACK
