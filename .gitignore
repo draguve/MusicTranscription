@@ -418,6 +418,7 @@ wandb/
 model_weights/
 Trainsets/
 lightning_logs/
+ArrangementModel/
 
 # Remove previous ipynb_checkpoints
 #   git rm -r .ipynb_checkpoints/

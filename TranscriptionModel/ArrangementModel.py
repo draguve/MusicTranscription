@@ -17,11 +17,9 @@ from pytorch_lightning import LightningModule
 from TranscriptionDataset import ArrangementDataset
 
 
-class TuningModel(LightningModule):
+class ArrangementModel(LightningModule):
     def __init__(self, tuning_size, capo_size, arrangement_size):
         super().__init__()
-
-        # mnist images are (1, 28, 28) (channels, height, width)
         self.conv1 = nn.Conv1d(2, 35, kernel_size=80, stride=16)
         self.bn1 = nn.BatchNorm1d(35)
         self.pool1 = nn.MaxPool1d(4)
@@ -37,6 +35,7 @@ class TuningModel(LightningModule):
         # self.fcTuning = nn.Linear(70, tuning_size)
         # self.fcCapo = nn.Linear(70, capo_size)
         self.fcArrangement = nn.Linear(70, arrangement_size)
+        self.save_hyperparameters()
 
     def forward(self, x):
         x = self.conv1(x)
@@ -63,22 +62,23 @@ class TuningModel(LightningModule):
         optimizer = torch.optim.Adam(self.parameters())
         return optimizer
 
-    def training_step(self, batch, batch_idx):
+    def get_loss_and_acc(self, batch):
         section, tuning, capo, arrangement = batch
         output = self(section).squeeze()
         loss = F.nll_loss(output, torch.argmax(arrangement.squeeze(), dim=1))
         acc = (torch.argmax(output, 1) == torch.argmax(arrangement.squeeze(), 1)).float().mean()
+        return loss, acc
+
+    def training_step(self, batch, batch_idx):
+        loss, acc = self.get_loss_and_acc(batch)
         self.log('train_loss', loss)
-        self.log('train_acc', acc)
+        self.log('train_acc', acc,on_epoch=True)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        section, tuning, capo, arrangement = val_batch
-        output = self(section).squeeze()
-        loss = F.nll_loss(output, torch.argmax(arrangement.squeeze(), dim=1))
-        acc = (torch.argmax(output, 1) == torch.argmax(arrangement.squeeze(), 1)).float().mean()
+        loss, acc = self.get_loss_and_acc(val_batch)
         self.log('val_loss', loss)
-        self.log('loss_acc', acc)
+        self.log('loss_acc', acc,on_epoch=True)
 
 
 if __name__ == '__main__':
@@ -99,7 +99,7 @@ if __name__ == '__main__':
     section, tuning, capo, arrangement = next(dataiter)
     print(len(next(dataiter)))
     print(f"{section.shape} {tuning.shape} {capo.shape} {arrangement.shape}")
-    test = TuningModel(
+    test = ArrangementModel(
         tuning_size=transform.tuning_output_size,
         capo_size=transform.capo_output_size,
         arrangement_size=transform.arrangement_output_size

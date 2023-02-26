@@ -115,6 +115,12 @@ class ArrangementDataset(IterableDataset):
     def __iter__(self) -> Iterator[T_co]:
         return self.get_stream(self.data)
 
+    # def __len__(self):
+    #     h5file = h5py.File(self.filename, "r")
+    #     songsGroup = h5file["Songs"]
+    #     totalInSeconds = songsGroup.attrs["totalSize"] * songsGroup.attrs["spectrogramSizeInSeconds"]
+    #     return int(totalInSeconds / (self.timeInSeconds*2))
+
 
 def worker_init_fn(worker_id):
     worker_info = torch.utils.data.get_worker_info()
@@ -135,26 +141,26 @@ def worker_init_fn(worker_id):
 
 class ArrangementDataModule(pl.LightningDataModule):
 
-    def __init__(self, location, batch_size=2, sample_rate=16000, num_workers=0, test_size=0.3):
+    def __init__(self, location, batch_size=2, sample_rate=16000, num_workers=0, val_size=0.3):
         super().__init__()
         self.location = location
         self.batch_size = batch_size
         self.sample_rate = sample_rate
         self.dataset_train = None
-        self.dataset_test = None
+        self.dataset_val = None
         self.num_workers = num_workers
-        self.test_size = test_size
+        self.val_size = val_size
         self.transform = OneHotEncodeArrangement(self.location)
 
     def setup(self, stage):
         self.dataset_train = ArrangementDataset(self.location, sampleRate=self.sample_rate,
                                                 oneHotTransform=self.transform)
         total_set = numpy.array(self.dataset_train.get_all_data())
-        train, test = train_test_split(total_set, test_size=self.test_size)
+        train, test = train_test_split(total_set, test_size=self.val_size)
         self.dataset_train.data = train
-        self.dataset_test = ArrangementDataset(self.location, sampleRate=self.sample_rate,
-                                               oneHotTransform=self.transform)
-        self.dataset_test.data = test
+        self.dataset_val = ArrangementDataset(self.location, sampleRate=self.sample_rate,
+                                              oneHotTransform=self.transform)
+        self.dataset_val.data = test
 
     def train_dataloader(self):
         if self.num_workers == 0:
@@ -164,8 +170,8 @@ class ArrangementDataModule(pl.LightningDataModule):
 
     def val_dataloader(self):
         if self.num_workers == 0:
-            self.dataset_test.start()
-        return DataLoader(self.dataset_test, batch_size=self.batch_size, num_workers=self.num_workers,
+            self.dataset_val.start()
+        return DataLoader(self.dataset_val, batch_size=self.batch_size, num_workers=self.num_workers,
                           worker_init_fn=worker_init_fn)
 
 
