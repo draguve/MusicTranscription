@@ -19,7 +19,9 @@ from TranscriptionDataset import ArrangementDataset
 
 class ArrangementModel(LightningModule):
     def __init__(self, tuning_size, capo_size, arrangement_size):
+        # self.count=0
         super().__init__()
+        self.acc = torch.tensor([0])
         self.conv1 = nn.Conv1d(2, 35, kernel_size=80, stride=16)
         self.bn1 = nn.BatchNorm1d(35)
         self.pool1 = nn.MaxPool1d(4)
@@ -62,23 +64,32 @@ class ArrangementModel(LightningModule):
         optimizer = torch.optim.Adam(self.parameters())
         return optimizer
 
-    def get_loss_and_acc(self, batch):
+    def get_loss_and_acc(self, batch,batch_idx):
         section, tuning, capo, arrangement = batch
-        output = self(section).squeeze()
-        loss = F.nll_loss(output, torch.argmax(arrangement.squeeze(), dim=1))
-        acc = (torch.argmax(output, 1) == torch.argmax(arrangement.squeeze(), 1)).float().mean()
-        return loss, acc
+        output = self(section).squeeze(1)
+        # print(f"{self.count} {section.shape} {tuning.shape} {capo.shape} {arrangement.shape} {arrangement.squeeze(1).shape} {torch.argmax(arrangement.squeeze(1), dim=1).shape} {output.shape}")
+        # self.count+=1
+        loss = F.nll_loss(output, torch.argmax(arrangement.squeeze(1), dim=1))
+        acc = (torch.argmax(output, 1) == torch.argmax(arrangement.squeeze(1), 1)).float().mean().to(self.acc)
+        self.acc = acc+self.acc
+        return loss, self.acc/(torch.tensor([batch_idx+1]))
 
     def training_step(self, batch, batch_idx):
-        loss, acc = self.get_loss_and_acc(batch)
+        loss, acc = self.get_loss_and_acc(batch,batch_idx)
         self.log('train_loss', loss)
-        self.log('train_acc', acc,on_epoch=True)
+        self.log('train_acc', acc)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        loss, acc = self.get_loss_and_acc(val_batch)
+        loss, acc = self.get_loss_and_acc(val_batch,batch_idx)
         self.log('val_loss', loss)
-        self.log('loss_acc', acc,on_epoch=True)
+        self.log('loss_acc', acc)
+
+    def training_epoch_end(self, outputs):
+        self.acc = torch.tensor([0])
+
+    def validation_epoch_end(self, outputs):
+        self.acc = torch.tensor([0])
 
 
 if __name__ == '__main__':

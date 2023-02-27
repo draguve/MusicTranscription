@@ -167,26 +167,38 @@ class ArrangementDataModule(pl.LightningDataModule):
     def train_dataloader(self):
         if self.num_workers == 0:
             self.dataset_train.start()
-        return DataLoader(self.dataset_train,
-                          batch_size=self.batch_size,
-                          num_workers=self.num_workers,
-                          worker_init_fn=worker_init_fn)
+        return DataLoader(
+            self.dataset_train,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            worker_init_fn=worker_init_fn,
+            persistent_workers=True,
+            prefetch_factor=2
+        )
 
     def val_dataloader(self):
         if self.num_workers == 0:
             self.dataset_val.start()
-        return DataLoader(self.dataset_val,
-                          batch_size=self.batch_size,
-                          num_workers=self.num_workers,
-                          worker_init_fn=worker_init_fn)
+        return DataLoader(
+            self.dataset_train,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            pin_memory=True,
+            worker_init_fn=worker_init_fn,
+            persistent_workers=True,
+            prefetch_factor=2
+        )
 
 
 if __name__ == '__main__':
     SAMPLE_RATE = 44100
     dataset = "../Trainsets/massive_test2.hdf5"
-    module = ArrangementDataModule(dataset, batch_size=2, num_workers=2)
+    module = ArrangementDataModule(dataset, batch_size=16, num_workers=10)
     module.setup("")
     dataiter = iter(module.train_dataloader())
+    count = 0
     for item in dataiter:
-        for elem in item:
-            print(elem.shape)
+        section, tuning, capo, arrangement = item
+        print(f"{count} {section.shape} {tuning.shape} {capo.shape} {arrangement.shape}")
+        count += 1
