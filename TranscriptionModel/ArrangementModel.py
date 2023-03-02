@@ -18,7 +18,7 @@ from TranscriptionDataset import ArrangementDataset
 
 
 class ArrangementModel(LightningModule):
-    def __init__(self, tuning_size, capo_size, arrangement_size):
+    def __init__(self, tuning_size, arrangement_size):
         # self.count=0
         super().__init__()
         self.acc = torch.tensor([0])
@@ -65,7 +65,7 @@ class ArrangementModel(LightningModule):
         return optimizer
 
     def get_loss_and_acc(self, batch,batch_idx):
-        section, tuning, capo, arrangement = batch
+        section, tuning, arrangement = batch
         output = self(section).squeeze(1)
         # print(f"{self.count} {section.shape} {tuning.shape} {capo.shape} {arrangement.shape} {arrangement.squeeze(1).shape} {torch.argmax(arrangement.squeeze(1), dim=1).shape} {output.shape}")
         # self.count+=1
@@ -107,12 +107,11 @@ if __name__ == '__main__':
         # num_workers=2
     )  # , num_workers=4)
     dataiter = iter(loader)
-    section, tuning, capo, arrangement = next(dataiter)
+    section, tuning , arrangement = next(dataiter)
     print(len(next(dataiter)))
-    print(f"{section.shape} {tuning.shape} {capo.shape} {arrangement.shape}")
+    print(f"{section.shape} {tuning.shape} {arrangement.shape}")
     test = ArrangementModel(
         tuning_size=transform.tuning_output_size,
-        capo_size=transform.capo_output_size,
         arrangement_size=transform.arrangement_output_size
     )
     output = test.forward(section)

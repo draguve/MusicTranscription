@@ -25,41 +25,42 @@ class OneHotEncodeArrangement(Callable):
         songsGroup = h5file["Songs"]
         data = list(json.loads(songsGroup.attrs["index"]).values())
         tunings = None
-        capos = None
         arrangements = None
+        lastTuningAndCapo = None
+        lastArrangement = None
         for item in tqdm.tqdm(data, desc="Creating OneHotEncodings"):
             songGroup = h5file[f"/Songs/{item['group']}"]
             tuning = str(songGroup["tuning"][0:])
             if tunings is None:
-                tunings = songGroup["tuning"][0:]
-                capos = np.array([int(songGroup.attrs["capo"])])
+                capo = np.array([int(songGroup.attrs["capo"])])
+                tunings = np.hstack((songGroup["tuning"][0:], capo))
                 thisArrangement = [int(ArrangementUtils.arrangementIndex[arr]) + 3 for arr in
                                    songGroup.attrs["allArrangements"]]
                 arrangements = np.zeros(6)
                 arrangements[thisArrangement] = 1
             else:
-                tunings = np.vstack((tunings, songGroup["tuning"][0:]))
                 capo = np.array([int(songGroup.attrs["capo"])])
-                capos = np.vstack((capos, capo))
+                tuningsAndCapo = np.hstack((songGroup["tuning"][0:], capo))
+                tunings = np.vstack((tunings, tuningsAndCapo))
                 thisArrangement = [int(ArrangementUtils.arrangementIndex[arr]) + 3 for arr in
                                    songGroup.attrs["allArrangements"]]
                 arrangement = np.zeros(6)
                 arrangement[thisArrangement] = 1
                 arrangements = np.vstack((arrangements, arrangement))
+                lastTuningAndCapo = tuningsAndCapo
+                lastArrangement = arrangement
             if tuning in all_tunings:
                 all_tunings[tuning] += 1
             else:
                 all_tunings[tuning] = 1
         self.oheTunings = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(tunings)
-        self.oheCaps = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(capos)
         self.oheArrangements = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(arrangements)
-        self.tuning_output_size = sum(self.oheTunings._n_features_outs)
-        self.capo_output_size = sum(self.oheCaps._n_features_outs)
-        self.arrangement_output_size = sum(self.oheArrangements._n_features_outs)
+        self.tuning_output_size = self.oheTunings.transform(np.expand_dims(lastTuningAndCapo, 0)).shape[1]
+        self.arrangement_output_size = self.oheArrangements.transform(np.expand_dims(lastArrangement, 0)).shape[1]
 
-    def __call__(self, tunings, capo, arrangement):
-        return self.oheTunings.transform(np.expand_dims(tunings, 0)), self.oheCaps.transform(
-            np.expand_dims(capo, 0)), self.oheArrangements.transform(np.expand_dims(arrangement, 0))
+    def __call__(self, tunings, arrangement):
+        return self.oheTunings.transform(np.expand_dims(tunings, 0)), self.oheArrangements.transform(
+            np.expand_dims(arrangement, 0))
 
 
 class ArrangementDataset(IterableDataset):
@@ -89,7 +90,6 @@ class ArrangementDataset(IterableDataset):
 
     def process_file(self, indexItem):
         songGroup = self.h5file[f"/Songs/{indexItem['group']}"]
-        tuning = torch.Tensor(songGroup["tuning"][0:])
         info = torchaudio.info(indexItem["ogg"])
         file_sample_rate = info.sample_rate
         waveform, sample_rate = torchaudio.load(indexItem["ogg"], normalize=True)
@@ -100,16 +100,18 @@ class ArrangementDataset(IterableDataset):
                            songGroup.attrs["allArrangements"]]
         arrangement = np.zeros(6)
         arrangement[thisArrangement] = 1
+        tuning = torch.Tensor(songGroup["tuning"][0:])
         capo = np.array([int(songGroup.attrs["capo"])])
+        tuning = np.hstack((tuning, capo))
         if self.oneHotTransform:
-            tuning, capo, arrangement = self.oneHotTransform(tuning, capo, arrangement)
+            tuning, arrangement = self.oneHotTransform(tuning, arrangement)
         allSections = torch.split(waveform, self.file_number_samples_to_read, dim=1)
         for section in allSections:
             if section.size(0) != 2:
                 continue
             if section.size(1) != self.file_number_samples_to_read:
                 section = F.pad(section, (self.file_number_samples_to_read - section.size(1), 0))
-            yield section, tuning, capo, arrangement
+            yield section, tuning, arrangement
 
     def get_stream(self, list_data):
         return chain.from_iterable(map(self.process_file, chain(list_data)))
@@ -194,11 +196,11 @@ class ArrangementDataModule(pl.LightningDataModule):
 if __name__ == '__main__':
     SAMPLE_RATE = 44100
     dataset = "../Trainsets/massive_test2.hdf5"
-    module = ArrangementDataModule(dataset, batch_size=16, num_workers=10)
+    module = ArrangementDataModule(dataset, batch_size=16, num_workers=2)
     module.setup("")
     dataiter = iter(module.train_dataloader())
     count = 0
     for item in dataiter:
-        section, tuning, capo, arrangement = item
-        print(f"{count} {section.shape} {tuning.shape} {capo.shape} {arrangement.shape}")
+        section, tuning, arrangement = item
+        print(f"{count} {section.shape} {tuning.shape} {arrangement.shape}")
         count += 1
