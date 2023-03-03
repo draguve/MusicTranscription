@@ -40,12 +40,15 @@ def store_dlc(guitarTokenizer, typeOfArrangement, fileLocations):
         numberOfSection = len(songSections)
         startSections = np.array([section.startSeconds for section in songSections])
         endSections = np.array([section.stopSeconds for section in songSections])
+        ebeatsTimings = np.array([float(section["time"]) for section in parsedSong["ebeats"]])
+        ebeatsMeasureStarts = np.array([section for section in range(len(parsedSong["ebeats"])) if 'measure' in parsedSong["ebeats"][section]])
         songGroup["startSeconds"] = startSections
         songGroup["endSeconds"] = endSections
         songGroup["tuning"] = [int(offset) for offset in
                                sortedcontainers.SortedDict(parsedSong["tuning"]).values()]
+        songGroup["ebeatsTimings"] = ebeatsTimings
+        songGroup["ebeatsMeasureStarts"] = ebeatsMeasureStarts
         songGroup["attrs"] = {}
-
         songGroup["attrs"]["arrangementIndex"] = arrangementIndex[typeOfArrangement]
         songGroup["attrs"]["arrangement"] = typeOfArrangement
         songGroup["attrs"]["allArrangements"] = np.intersect1d(arrangementsToConvert,list(fileLocations.keys())).tolist()
@@ -112,6 +115,8 @@ if __name__ == '__main__':
             songGroup.create_dataset("startSeconds", data=result["startSeconds"])
             songGroup.create_dataset("endSeconds", data=result["endSeconds"])
             songGroup.create_dataset("tuning", data=result["tuning"])
+            songGroup.create_dataset("ebeatsTimings", data=result["ebeatsTimings"])
+            songGroup.create_dataset("ebeatsMeasureStarts", data=result["ebeatsMeasureStarts"])
             for item in result["attrs"].keys():
                 songGroup.attrs[item] = result["attrs"][item]
             songGroup.attrs["startIndex"] = last_added
