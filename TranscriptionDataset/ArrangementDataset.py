@@ -44,7 +44,7 @@ class OneHotEncodeArrangement(Callable):
                 tunings = np.vstack((tunings, tuningsAndCapo))
                 thisArrangement = [int(ArrangementUtils.arrangementIndex[arr]) + 3 for arr in
                                    songGroup.attrs["allArrangements"]]
-                arrangement = np.zeros(6)
+                arrangement = np.zeros(6, float)
                 arrangement[thisArrangement] = 1
                 arrangements = np.vstack((arrangements, arrangement))
                 lastTuningAndCapo = tuningsAndCapo
@@ -54,13 +54,11 @@ class OneHotEncodeArrangement(Callable):
             else:
                 all_tunings[tuning] = 1
         self.oheTunings = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(tunings)
-        self.oheArrangements = OneHotEncoder(handle_unknown='ignore', sparse_output=False).fit(arrangements)
         self.tuning_output_size = self.oheTunings.transform(np.expand_dims(lastTuningAndCapo, 0)).shape[1]
-        self.arrangement_output_size = self.oheArrangements.transform(np.expand_dims(lastArrangement, 0)).shape[1]
+        self.arrangement_output_size = 6
 
     def __call__(self, tunings, arrangement):
-        return self.oheTunings.transform(np.expand_dims(tunings, 0)), self.oheArrangements.transform(
-            np.expand_dims(arrangement, 0))
+        return self.oheTunings.transform(np.expand_dims(tunings, 0)), arrangement
 
 
 class ArrangementDataset(IterableDataset):
@@ -98,10 +96,10 @@ class ArrangementDataset(IterableDataset):
             sample_rate = self.sample_rate
         thisArrangement = [int(ArrangementUtils.arrangementIndex[arr]) + 3 for arr in
                            songGroup.attrs["allArrangements"]]
-        arrangement = np.zeros(6)
+        arrangement = np.zeros(6, np.single)
         arrangement[thisArrangement] = 1
-        tuning = torch.Tensor(songGroup["tuning"][0:])
-        capo = np.array([int(songGroup.attrs["capo"])])
+        tuning = torch.Tensor(songGroup["tuning"][0:]).float()
+        capo = np.array([int(songGroup.attrs["capo"])], np.single)
         tuning = np.hstack((tuning, capo))
         if self.oneHotTransform:
             tuning, arrangement = self.oneHotTransform(tuning, arrangement)
@@ -145,7 +143,7 @@ def worker_init_fn(worker_id):
 
 class ArrangementDataModule(pl.LightningDataModule):
 
-    def __init__(self, location, batch_size=2, sample_rate=16000, num_workers=0, val_size=0.3):
+    def __init__(self, location, batch_size=2, sample_rate=16000, num_workers=0, val_size=0.3, disableOhe=False):
         super().__init__()
         self.location = location
         self.batch_size = batch_size
@@ -154,7 +152,10 @@ class ArrangementDataModule(pl.LightningDataModule):
         self.dataset_val = None
         self.num_workers = num_workers
         self.val_size = val_size
-        self.transform = OneHotEncodeArrangement(self.location)
+        if disableOhe:
+            self.transform = None
+        else:
+            self.transform = OneHotEncodeArrangement(self.location)
 
     def setup(self, stage):
         self.dataset_train = ArrangementDataset(self.location, sampleRate=self.sample_rate,
@@ -196,7 +197,7 @@ class ArrangementDataModule(pl.LightningDataModule):
 if __name__ == '__main__':
     SAMPLE_RATE = 44100
     dataset = "../Trainsets/massive_test2.hdf5"
-    module = ArrangementDataModule(dataset, batch_size=16, num_workers=2)
+    module = ArrangementDataModule(dataset, batch_size=16, num_workers=2, disableOhe=True)
     module.setup("")
     dataiter = iter(module.train_dataloader())
     count = 0

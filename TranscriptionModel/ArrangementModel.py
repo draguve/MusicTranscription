@@ -18,19 +18,22 @@ from TranscriptionDataset import ArrangementDataset
 
 
 class ArrangementModel(LightningModule):
-    def __init__(self, tuning_size, arrangement_size):
+    def __init__(self, arrangement_size):
         # self.count=0
         super().__init__()
         self.acc = torch.tensor([0])
         self.conv1 = nn.Conv1d(2, 35, kernel_size=80, stride=16)
         self.bn1 = nn.BatchNorm1d(35)
         self.pool1 = nn.MaxPool1d(4)
+        self.batchNorm1 = nn.BatchNorm1d(35)
         self.conv2 = nn.Conv1d(35, 35, kernel_size=3)
         self.bn2 = nn.BatchNorm1d(35)
         self.pool2 = nn.MaxPool1d(4)
+        self.batchNorm2 = nn.BatchNorm1d(35)
         self.conv3 = nn.Conv1d(35, 70, kernel_size=3)
         self.bn3 = nn.BatchNorm1d(70)
         self.pool3 = nn.MaxPool1d(4)
+        self.batchNorm3 = nn.BatchNorm1d(70)
         self.conv4 = nn.Conv1d(70, 70, kernel_size=3)
         self.bn4 = nn.BatchNorm1d(70)
         self.pool4 = nn.MaxPool1d(4)
@@ -43,12 +46,15 @@ class ArrangementModel(LightningModule):
         x = self.conv1(x)
         x = F.relu(self.bn1(x))
         x = self.pool1(x)
+        x = self.batchNorm1(x)
         x = self.conv2(x)
         x = F.relu(self.bn2(x))
         x = self.pool2(x)
+        x = self.batchNorm2(x)
         x = self.conv3(x)
         x = F.relu(self.bn3(x))
         x = self.pool3(x)
+        x = self.batchNorm3(x)
         x = self.conv4(x)
         x = F.relu(self.bn4(x))
         x = self.pool4(x)
@@ -58,45 +64,41 @@ class ArrangementModel(LightningModule):
         # capo = self.fcCapo(x)
         arrangement = self.fcArrangement(x)
         # return F.log_softmax(tuning, dim=2), F.log_softmax(capo, dim=2), F.log_softmax(arrangement, dim=2)
-        return F.log_softmax(arrangement, dim=2)
+        return arrangement
 
     def configure_optimizers(self) -> Any:
         optimizer = torch.optim.Adam(self.parameters())
         return optimizer
 
-    def get_loss_and_acc(self, batch,batch_idx):
+    def get_loss_and_acc(self, batch, batch_idx):
         section, tuning, arrangement = batch
         output = self(section).squeeze(1)
         # print(f"{self.count} {section.shape} {tuning.shape} {capo.shape} {arrangement.shape} {arrangement.squeeze(1).shape} {torch.argmax(arrangement.squeeze(1), dim=1).shape} {output.shape}")
         # self.count+=1
-        loss = F.nll_loss(output, torch.argmax(arrangement.squeeze(1), dim=1))
-        acc = (torch.argmax(output, 1) == torch.argmax(arrangement.squeeze(1), 1)).float().mean().to(self.acc)
-        self.acc = acc+self.acc
-        return loss, self.acc/(torch.tensor([batch_idx+1]))
+        loss = F.mse_loss(output, arrangement.squeeze(1))
+        return loss
 
     def training_step(self, batch, batch_idx):
-        loss, acc = self.get_loss_and_acc(batch,batch_idx)
+        loss = self.get_loss_and_acc(batch, batch_idx)
         self.log('train_loss', loss)
-        self.log('train_acc', acc)
         return loss
 
     def validation_step(self, val_batch, batch_idx):
-        loss, acc = self.get_loss_and_acc(val_batch,batch_idx)
+        loss = self.get_loss_and_acc(val_batch, batch_idx)
         self.log('val_loss', loss)
-        self.log('loss_acc', acc)
 
-    def training_epoch_end(self, outputs):
-        self.acc = torch.tensor([0])
-
-    def validation_epoch_end(self, outputs):
-        self.acc = torch.tensor([0])
+    # def training_epoch_end(self, outputs):
+    #     self.acc = torch.tensor([0])
+    #
+    # def validation_epoch_end(self, outputs):
+    #     self.acc = torch.tensor([0])
 
 
 if __name__ == '__main__':
     SAMPLE_RATE = 16000
     dataset = "../Trainsets/massive_test2.hdf5"
-    transform = ArrangementDataset.OneHotEncodeArrangement(dataset)
-    dataset = ArrangementDataset.ArrangementDataset(dataset, sampleRate=SAMPLE_RATE, oneHotTransform=transform)
+    # transform = ArrangementDataset.OneHotEncodeArrangement(dataset)
+    dataset = ArrangementDataset.ArrangementDataset(dataset, sampleRate=SAMPLE_RATE, oneHotTransform=None)
     dataset.start()
     dataset.load_all_data()
     loader = DataLoader(
@@ -107,12 +109,11 @@ if __name__ == '__main__':
         # num_workers=2
     )  # , num_workers=4)
     dataiter = iter(loader)
-    section, tuning , arrangement = next(dataiter)
+    section, tuning, arrangement = next(dataiter)
     print(len(next(dataiter)))
     print(f"{section.shape} {tuning.shape} {arrangement.shape}")
     test = ArrangementModel(
-        tuning_size=transform.tuning_output_size,
-        arrangement_size=transform.arrangement_output_size
+        arrangement_size=6
     )
     output = test.forward(section)
     test.training_step(next(dataiter), 0)
