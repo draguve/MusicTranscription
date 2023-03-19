@@ -419,7 +419,7 @@ model_weights/
 Trainsets/
 lightning_logs/
 ArrangementModel/
-
+MiniDataset/
 # Remove previous ipynb_checkpoints
 #   git rm -r .ipynb_checkpoints/
 

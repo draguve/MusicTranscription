@@ -89,10 +89,10 @@ def store_dlc(guitarTokenizer, typeOfArrangement, fileLocations):
 
 
 if __name__ == '__main__':
-    dlcs = get_all_dlc_files(r"Downloads")
+    dlcs = get_all_dlc_files(r"MiniDataset")
     tokenizer = GuitarTokenizer(SpectrogramSizeInSeconds, NumberOfTimeTokensPerSecond)
     # creating a file
-    with h5py.File('Trainsets/massive_test2.hdf5', 'w') as f:
+    with h5py.File('Trainsets/mini_test.hdf5', 'w') as f:
 
         delayed_fucs = []
         for dlc in dlcs:

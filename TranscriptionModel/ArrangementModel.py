@@ -25,46 +25,48 @@ class ArrangementModel(LightningModule):
         self.conv1 = nn.Conv1d(2, 35, kernel_size=80, stride=16)
         self.bn1 = nn.BatchNorm1d(35)
         self.pool1 = nn.MaxPool1d(4)
-        self.batchNorm1 = nn.BatchNorm1d(35)
         self.conv2 = nn.Conv1d(35, 35, kernel_size=3)
         self.bn2 = nn.BatchNorm1d(35)
         self.pool2 = nn.MaxPool1d(4)
-        self.batchNorm2 = nn.BatchNorm1d(35)
         self.conv3 = nn.Conv1d(35, 70, kernel_size=3)
         self.bn3 = nn.BatchNorm1d(70)
         self.pool3 = nn.MaxPool1d(4)
-        self.batchNorm3 = nn.BatchNorm1d(70)
         self.conv4 = nn.Conv1d(70, 70, kernel_size=3)
         self.bn4 = nn.BatchNorm1d(70)
         self.pool4 = nn.MaxPool1d(4)
         # self.fcTuning = nn.Linear(70, tuning_size)
         # self.fcCapo = nn.Linear(70, capo_size)
-        self.fcArrangement = nn.Linear(70, arrangement_size)
+        self.flattener = nn.Flatten(1)
+        self.fcArrangement = nn.Linear(70 * 233,1000)
+        self.linear2 = nn.Linear(1000,100)
+        self.linear3 = nn.Linear(100,arrangement_size)
         self.save_hyperparameters()
 
     def forward(self, x):
-        x = self.conv1(x)
+        x = self.conv1(x)  # (B,2,960000) -> B,35,59996
         x = F.relu(self.bn1(x))
-        x = self.pool1(x)
-        x = self.batchNorm1(x)
-        x = self.conv2(x)
-        x = F.relu(self.bn2(x))
-        x = self.pool2(x)
-        x = self.batchNorm2(x)
-        x = self.conv3(x)
+        x = self.pool1(x)  # B,35,14999
+        x = self.conv2(x)  # B,35,14999
+        x = F.relu(self.bn2(x))  # B,35,14997
+        x = self.pool2(x)  # B,35,3749
+        x = self.conv3(x)  # B,35,3747
         x = F.relu(self.bn3(x))
-        x = self.pool3(x)
-        x = self.batchNorm3(x)
-        x = self.conv4(x)
+        x = self.pool3(x)  # B,35,936
+        x = self.conv4(x)  # B,70,934
         x = F.relu(self.bn4(x))
-        x = self.pool4(x)
-        x = F.avg_pool1d(x, x.shape[-1])
-        x = x.permute(0, 2, 1)
+        x = self.pool4(x)  # B,70,233
+        x = self.flattener(x)
+        # x = x.permute(0, 2, 1)
         # tuning = self.fcTuning(x)
         # capo = self.fcCapo(x)
-        arrangement = self.fcArrangement(x)
+        x = self.fcArrangement(x)
+        x = F.relu(x)
+        x = self.linear2(x)
+        x = F.relu(x)
+        x = self.linear3(x)
         # return F.log_softmax(tuning, dim=2), F.log_softmax(capo, dim=2), F.log_softmax(arrangement, dim=2)
-        return arrangement
+
+        return F.sigmoid(x)
 
     def configure_optimizers(self) -> Any:
         optimizer = torch.optim.Adam(self.parameters())
