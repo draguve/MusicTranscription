@@ -184,7 +184,7 @@ class ArrangementDataModule(pl.LightningDataModule):
         if self.num_workers == 0:
             self.dataset_val.start()
         return DataLoader(
-            self.dataset_train,
+            self.dataset_val,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
