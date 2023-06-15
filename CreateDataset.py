@@ -83,16 +83,17 @@ def store_dlc(guitarTokenizer, typeOfArrangement, fileLocations):
         for item in dataToStore.keys():
             songGroup["attrs"][item] = str(dataToStore[item])
         return songGroup
-    except:
+    except Exception as e:
+        print(e)
         print(f"could not parse {fileLocations}")
         return None
 
 
 if __name__ == '__main__':
-    dlcs = get_all_dlc_files(r"MiniDataset")
+    dlcs = get_all_dlc_files(r"Downloads2")
     tokenizer = GuitarTokenizer(SpectrogramSizeInSeconds, NumberOfTimeTokensPerSecond)
     # creating a file
-    with h5py.File('Trainsets/mini_test.hdf5', 'w') as f:
+    with h5py.File('Trainsets/S_Tier.hdf5', 'w') as f:
 
         delayed_fucs = []
         for dlc in dlcs:
