@@ -26,7 +26,8 @@ class MusicMetaSequence(tf.keras.utils.Sequence):
         songGroup = self.h5file[f"/Songs/{self.data[idx]['group']}"]
         songData,sr = librosa.load(self.data[idx]["ogg"],sr=16000,mono=False)
         mel = librosa.feature.melspectrogram(y=songData, sr=sr, n_mels=128,fmax=8000)
-        mel = mel.reshape(256,-1)
+        assert len(mel.shape) == 3
+        mel = mel.reshape(256,mel.shape[-1])
         thisArrangement = [int(arrangementIndex[arr]) + 3 for arr in
                            songGroup.attrs["allArrangements"]]
         arrangement = np.zeros(6, np.single)

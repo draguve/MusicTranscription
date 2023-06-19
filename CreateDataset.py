@@ -11,17 +11,22 @@ from TUtils import get_all_dlc_files, tqdm_joblib
 from Tokenizer import GuitarTokenizer
 from Tokenizer import SongXMLParser
 from TUtils import random_string
+from pathos.multiprocessing import ProcessPool
+import librosa
+
 
 SpectrogramSizeInSeconds = 1.0
 NumberOfTimeTokensPerSecond = 1000
 remove_all_silence = True
-from joblib import delayed
+generate_and_store_mel = True
 
+
+#private
 toRemoveForStore = ["notes", "chords", "ebeats", "chordTemplates", "phraseIterations", "sections", "anchors",
                     "handShapes"]
 
-
-def store_dlc(guitarTokenizer, typeOfArrangement, fileLocations):
+def store_dlc(typeOfArrangement, fileLocations,songId):
+    guitarTokenizer = GuitarTokenizer(SpectrogramSizeInSeconds, NumberOfTimeTokensPerSecond)
     try:
         if "rs2dlc" in fileLocations:
             with open(fileLocations["rs2dlc"]) as user_file:
@@ -70,8 +75,8 @@ def store_dlc(guitarTokenizer, typeOfArrangement, fileLocations):
             "len": numberOfSection,
             "typeOfArrangement": typeOfArrangement,
             "ogg": fileLocations["ogg"],
-            "numberOfSections": numberOfSection
-
+            "numberOfSections": numberOfSection,
+            "songId":songId
         }
         # sortedDlcs[lastAdded] = {"group": group_name,
         #                          "startIndex": lastAdded,
@@ -82,34 +87,55 @@ def store_dlc(guitarTokenizer, typeOfArrangement, fileLocations):
             songGroup["attrs"][item] = info_to_store[item]
         for item in dataToStore.keys():
             songGroup["attrs"][item] = str(dataToStore[item])
+
+
         return songGroup
     except Exception as e:
         print(e)
         print(f"could not parse {fileLocations}")
         return None
 
+def generate_mel(id,ogg):
+    songData, sr = librosa.load(ogg, sr=16000, mono=False)
+    mel = librosa.feature.melspectrogram(y=songData, sr=sr, n_mels=128, fmax=8000)
+    assert len(mel.shape) == 3
+    mel = mel.reshape(256, mel.shape[-1])
+    return id,ogg,mel
 
 if __name__ == '__main__':
     dlcs = get_all_dlc_files(r"Downloads2")
-    tokenizer = GuitarTokenizer(SpectrogramSizeInSeconds, NumberOfTimeTokensPerSecond)
     # creating a file
-    with h5py.File('Trainsets/S_Tier.hdf5', 'w') as f:
+    with h5py.File('Trainsets/S_Tier4.hdf5', 'w') as f:
+        processPool = ProcessPool(nodes = 8)
 
-        delayed_fucs = []
+        all_keys = []
+        all_dlc = []
+        song_ids = []
+
+        all_dlc_mel_id = []
+        all_dlc_ogg = []
         for dlc in dlcs:
+            id = random_string()
+
+            if generate_and_store_mel:
+                all_dlc_mel_id.append(id)
+                all_dlc_ogg.append(dlc["ogg"])
+
+            #for each arrangement in the dlc
             for key in dlc:
                 if key in arrangementIndex:
-                    delayed_fucs.append(delayed(store_dlc)(tokenizer, key, dlc))
+                    all_keys.append(key)
+                    all_dlc.append(dlc)
+                    song_ids.append(id)
 
-        results = None
-        with tqdm_joblib(tqdm(desc="Parsing", total=len(delayed_fucs))) as progress_bar:
-            results = joblib.Parallel(n_jobs=16)(delayed_fucs)
+        results = processPool.imap(store_dlc,all_keys,all_dlc,song_ids)
 
         sortedDlcs = sortedcontainers.SortedDict()
         last_added = 0
         songs = f.create_group("Songs")
         maxNumberOfTokens = 0
-        for result in tqdm(results, desc="Writing Data"):
+
+        for result in tqdm(results,desc="Generating Metas",total=len(all_dlc)):
             if result is None:
                 continue
             songGroup = songs.create_group(result["attrs"]["group"])
@@ -142,4 +168,15 @@ if __name__ == '__main__':
         songs.attrs["spectrogramSizeInSeconds"] = SpectrogramSizeInSeconds
         songs.attrs["numberOfTimeTokensPerSecond"] = NumberOfTimeTokensPerSecond
         # This is without a pad token
-        songs.attrs["vocabSize"] = tokenizer.numberOfTokens()
+        guitarTokenizer = GuitarTokenizer(SpectrogramSizeInSeconds, NumberOfTimeTokensPerSecond)
+        songs.attrs["vocabSize"] = guitarTokenizer.numberOfTokens()
+
+        if generate_and_store_mel:
+            mels = f.create_group("MelSpectrograms")
+            results = processPool.imap(generate_mel, all_dlc_mel_id, all_dlc_ogg)
+            for song_id,ogg,mel in tqdm(results, desc="Generating Mels", total=len(all_dlc_mel_id)):
+                thisMel = mels.create_group(song_id)
+                thisMel.attrs["id"] = song_id
+                thisMel.attrs["ogg"] = ogg
+                thisMel.create_dataset("mel",data=mel,compression='gzip', compression_opts=9)
+                #maybe add the arrangementIndex Here
