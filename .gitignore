@@ -426,3 +426,4 @@ RSFiles/
 
 # End of https://www.toptal.com/developers/gitignore/api/jupyternotebooks
 /Models/
+/TBLogs/
