@@ -45,6 +45,9 @@ class MusicMetaSequence(tf.keras.utils.Sequence):
         return len(self.indexes)
         # return math.ceil(len(self.data) / self.batch_size)
 
+    def get_expected_output(self):
+        return self.arrangements
+
     def __getitem__(self, idx):
         shuffled_idx = self.indexes[idx]
         melGroup = self.h5file[f"/MelSpectrograms/{self.allFiles[shuffled_idx]}"]

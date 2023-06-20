@@ -7,7 +7,7 @@ import sortedcontainers
 from tqdm import tqdm
 
 from TUtils.ArrangementUtils import arrangementIndex,arrangementsToConvert
-from TUtils import get_all_dlc_files, tqdm_joblib
+from TUtils import get_all_dlc_files, tqdm_joblib, get_timestamp
 from Tokenizer import GuitarTokenizer
 from Tokenizer import SongXMLParser
 from TUtils import random_string
@@ -19,6 +19,8 @@ SpectrogramSizeInSeconds = 1.0
 NumberOfTimeTokensPerSecond = 1000
 remove_all_silence = True
 generate_and_store_mel = True
+load_from_directory = r"RSFiles/MiniDataset"
+train_set_name = "S_Tier"
 
 
 #private
@@ -103,9 +105,9 @@ def generate_mel(id,ogg):
     return id,ogg,mel
 
 if __name__ == '__main__':
-    dlcs = get_all_dlc_files(r"Downloads2")
+    dlcs = get_all_dlc_files(load_from_directory)
     # creating a file
-    with h5py.File('Trainsets/S_Tier4.hdf5', 'w') as f:
+    with h5py.File(f'Trainsets/{train_set_name}_{get_timestamp()}.hdf5', 'w') as f:
         processPool = ProcessPool(nodes = 8)
 
         all_keys = []

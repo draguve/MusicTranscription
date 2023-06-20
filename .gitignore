@@ -420,7 +420,9 @@ Trainsets/
 lightning_logs/
 ArrangementModel/
 MiniDataset/
+RSFiles/
 # Remove previous ipynb_checkpoints
 #   git rm -r .ipynb_checkpoints/
 
 # End of https://www.toptal.com/developers/gitignore/api/jupyternotebooks
+/Models/

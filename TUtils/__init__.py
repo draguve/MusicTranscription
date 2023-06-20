@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import string
 import random
-
+import time
 import joblib
 
 
@@ -49,3 +49,8 @@ def tqdm_joblib(tqdm_object):
     finally:
         joblib.parallel.BatchCompletionCallBack = old_batch_callback
         tqdm_object.close()
+
+
+def get_timestamp():
+    epoch_time = int(time.time())
+    return epoch_time
