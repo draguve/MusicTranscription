@@ -21,7 +21,7 @@ class Encoder:
             current += event.numberOfTokens
         self._numberOfTokens = current
 
-    def encode(self, eventName, data, string=-1):
+    def encode(self, eventName, data,*args):
         assert eventName in self._handlers
         eventOffset = self._nameToLocation[eventName]
         eventIndex = self._handlers[eventName].encode(data)
