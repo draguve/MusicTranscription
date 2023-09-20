@@ -56,7 +56,7 @@ arrangementTypeToInt = {
 }
 
 def createArrangementEvent(arrangementType:str):
-    if arrangementType not in validArrangementList:
+    if arrangementType not in validArrangementDict:
         raise Exception("Cannot parse this type of arrangement")
     if arrangementType[-1].isnumeric():
         specialization = int(arrangementType[-1])
@@ -325,9 +325,9 @@ class GuitarTokenizer:
 
                 # bend if any first
                 for event in sortedEvents[currentTime]["bend"]:
-                    if lastArrangement != event[2]:
-                        tokens.append(self.encoder.encode(*createArrangementEvent(event[2])))
-                        lastArrangement = event[2]
+                    if lastArrangement != event[3]:
+                        tokens.append(self.encoder.encode(*createArrangementEvent(event[3])))
+                        lastArrangement = event[3]
                     tokens.append(self.encoder.encode(*event))
                 # end notes
                 for event in sortedEvents[currentTime]["end"]:
@@ -351,14 +351,17 @@ class GuitarTokenizer:
             tokens.append(self.encoder.encode(*createEndOfSeqEvent()))
             sections.append(SongSection(startTime, stopTime, tokens))
 
-        for section in sections:
-            print(section.startSeconds,section.stopSeconds)
-            for toke in section.tokens:
-                pprint(self.encoder.decode(toke))
+        # for section in sections:
+        #     print(section.startSeconds,section.stopSeconds)
+        #     for toke in section.tokens:
+        #         pprint(self.encoder.decode(toke))
         return sections
 
 if __name__ == '__main__':
-    all_dlcs = get_all_dlc_files("../RSFiles/Downloads2")
-    tokenizer = GuitarTokenizer(1, 1000)
-    tokenizer.convertSongFromPaths(all_dlcs[4])
+    all_dlcs = get_all_dlc_files("../RSFiles/MiniDataset")
+    sections = []
+    tokenizer = GuitarTokenizer(30, 100)
+    for dlc in all_dlcs:
+        print(dlc)
+        sections.append(tokenizer.convertSongFromPaths(dlc))
     # pprint(tokenizer.convertSongFromPath(all_dlcs[4]["lead"]))
