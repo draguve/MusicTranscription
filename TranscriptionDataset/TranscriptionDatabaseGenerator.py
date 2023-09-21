@@ -59,7 +59,8 @@ def main():
         songs = f.create_group("Songs")
         processPool = ProcessPool(nodes=8)
         results = processPool.imap(store_dlc, all_dlcs)
-        index = {}
+        section_index = {}
+        song_index = {}
         for result in tqdm(results, desc="Generating Metas", total=len(all_dlcs)):
             dlc_id, sections, fileLocations = result
             if sections is None:
@@ -74,15 +75,16 @@ def main():
                 thisSection.attrs["numTokens"] = len(section.tokens)
                 thisSection.attrs["melShape"] = section.spectrogram.shape
                 thisSection.attrs["timeInSeconds"] = section.stopSeconds - section.startSeconds
-                index[f"{dlc_id}_{i}"] = {}
-                index[f"{dlc_id}_{i}"]["startSeconds"] = section.startSeconds
-                index[f"{dlc_id}_{i}"]["stopSeconds"] = section.stopSeconds
-                index[f"{dlc_id}_{i}"]["numTokens"] = len(section.tokens)
-                index[f"{dlc_id}_{i}"]["melShape"] = section.spectrogram.shape
-                index[f"{dlc_id}_{i}"]["timeInSeconds"] = section.stopSeconds - section.startSeconds
-            index[f"{dlc_id}"] = json.dumps(fileLocations)
+                section_index[f"{dlc_id}_{i}"] = {}
+                section_index[f"{dlc_id}_{i}"]["startSeconds"] = section.startSeconds
+                section_index[f"{dlc_id}_{i}"]["stopSeconds"] = section.stopSeconds
+                section_index[f"{dlc_id}_{i}"]["numTokens"] = len(section.tokens)
+                section_index[f"{dlc_id}_{i}"]["melShape"] = section.spectrogram.shape
+                section_index[f"{dlc_id}_{i}"]["timeInSeconds"] = section.stopSeconds - section.startSeconds
+            song_index[f"{dlc_id}"] = json.dumps(fileLocations)
         meta_group = f.create_group("Meta")
-        meta_group.attrs["index"] = json.dumps(index)
+        meta_group.attrs["section_index"] = json.dumps(section_index)
+        meta_group.attrs["song_index"] = json.dumps(song_index)
         meta_group.attrs["maxNumberOfSeconds"] = MAX_NO_OF_SECONDS
         meta_group.attrs["timeStepsPerSecond"] = TIMESTEPS_PER_SECOND
         meta_group.attrs["maxNumberOfTokensPerSection"] = MAX_TOKENS_PER_SECTION
