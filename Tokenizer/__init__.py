@@ -8,6 +8,7 @@ import sortedcontainers
 from pprint import pprint
 from TUtils import get_all_dlc_files
 import librosa
+from TUtils import ArrangementUtils
 
 
 def mergeDicts(dict1, dict2):
@@ -288,11 +289,17 @@ class GuitarTokenizer:
                 input_paths[key] = pathsDict[key]
         loaded_files = {}
         for key, path in input_paths.items():
-            loaded_files[key] = parse_xml_file(path)
+            temp_file = parse_xml_file(path)
+            this_tuning = ArrangementUtils.getTuningFromString(temp_file["tuning"])
+            # TODO Remove this later
+            if not any(this_tuning):
+                loaded_files[key] = temp_file
         return loaded_files
 
     def getTokensAndSpectrogram(self, filePaths):
         loaded_files = self.convertPathsToParsedFiles(filePaths)
+        if len(loaded_files) == 0:
+            return None,None
         sortedEvents = sortedcontainers.SortedDict()
         for arrangementKey in loaded_files.keys():
             for chordTemplate in loaded_files[arrangementKey]["chordTemplates"]:
@@ -386,14 +393,14 @@ class GuitarTokenizer:
         thisSectionSpectrogram = S[:, startSpectrogramIndex:]
         lastSection = SongSection(startTime, songLength, tokens, thisSectionSpectrogram)
         sections.append(lastSection)
-        return sections,loaded_files
+        return sections, loaded_files
 
 
 def test():
     all_dlcs = get_all_dlc_files("../RSFiles/MiniDataset")
     sections = []
     tokenizer = GuitarTokenizer(30, 50)
-    sections,parsedSong = tokenizer.getTokensAndSpectrogram(all_dlcs[0])
+    sections, parsedSong = tokenizer.getTokensAndSpectrogram(all_dlcs[0])
     for section in sections:
         print(
             f"sTime:{section.startSeconds} eTime:{section.stopSeconds} length:{section.stopSeconds - section.startSeconds} lengthToken:{len(section.tokens)} shapeSpec:{section.spectrogram.shape}")

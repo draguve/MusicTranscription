@@ -12,7 +12,7 @@ import h5py
 
 from Tokenizer import GuitarTokenizer
 
-DLC_Location = "../RSFiles/MiniDataset"
+DLC_Location = "../RSFiles/Downloads2"
 TRAINSETS_LOCATION = "../Trainsets"
 train_set_name = "S_Tier"
 MAX_NO_OF_SECONDS = 60
@@ -36,10 +36,13 @@ def store_dlc(fileLocations):
         n_mels=N_MELS,
     )
     sections, parsedSong = tokenizer.getTokensAndSpectrogram(fileLocations)
+    if sections is None:
+        return None, None, fileLocations
     return dlc_id, sections, fileLocations
 
 
 def main():
+    could_not_add = []
     all_dlcs = get_all_dlc_files(DLC_Location)
     tokenizer = GuitarTokenizer(
         maxNumberOfSeconds=MAX_NO_OF_SECONDS,
@@ -59,6 +62,9 @@ def main():
         index = {}
         for result in tqdm(results, desc="Generating Metas", total=len(all_dlcs)):
             dlc_id, sections, fileLocations = result
+            if sections is None:
+                could_not_add.append(fileLocations["ogg"])
+                continue
             for i, section in enumerate(sections):
                 thisSection = songs.create_group(f"{dlc_id}_{i}")
                 thisSection.create_dataset("tokens", data=np.array(section.tokens))
@@ -85,6 +91,8 @@ def main():
         meta_group.attrs["hop_length"] = HOP_LENGTH
         meta_group.attrs["n_mels"] = N_MELS
         meta_group.attrs["vocab_size"] = tokenizer.numberOfTokens()
+        meta_group.attrs["notAdded"] = could_not_add
+        meta_group.attrs["failedAddLen"] = len(could_not_add)
 
 
 if __name__ == '__main__':

@@ -1,8 +1,12 @@
 import torch
+import sortedcontainers
 
 arrangementsToConvert = ["lead", "lead2", "lead3", "rhythm", "rhythm2", "rhythm3"]
 arrangementIndex = {x: index - (len(arrangementsToConvert) / 2) for index, x in enumerate(arrangementsToConvert)}
 
+
+def getTuningFromString(input_data):
+    return [int(offset) for offset in sortedcontainers.SortedDict(input_data).values()]
 
 def getTuning(offsets: list[int]):
     assert len(offsets) == 6
