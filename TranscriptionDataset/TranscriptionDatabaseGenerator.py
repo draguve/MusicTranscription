@@ -68,8 +68,9 @@ def main():
                 continue
             for i, section in enumerate(sections):
                 thisSection = songs.create_group(f"{dlc_id}_{i}")
+                spectrogram = np.transpose(section.spectrogram, (1, 0))
                 thisSection.create_dataset("tokens", data=np.array(section.tokens))
-                thisSection.create_dataset("mel", data=section.spectrogram)
+                thisSection.create_dataset("mel", data=spectrogram)
                 thisSection.attrs["startSeconds"] = section.startSeconds
                 thisSection.attrs["stopSeconds"] = section.stopSeconds
                 thisSection.attrs["numTokens"] = len(section.tokens)
