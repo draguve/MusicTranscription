@@ -1,25 +1,90 @@
 # import Tokenizer
+import json
+
 from matplotlib import pyplot as plt
-from TUtils import get_all_dlc_files
+from pathos.multiprocessing import ProcessPool
+
+from TUtils import get_all_dlc_files, get_timestamp, random_string
 import librosa
 import numpy as np
+from tqdm import tqdm
+import h5py
+
+from Tokenizer import GuitarTokenizer
+
+DLC_Location = "../RSFiles/MiniDataset"
+TRAINSETS_LOCATION = "../Trainsets"
+train_set_name = "S_Tier"
+MAX_NO_OF_SECONDS = 60
+TIMESTEPS_PER_SECOND = 50
+MAX_TOKENS_PER_SECTION = 1000
+SAMPLE_RATE = 16000
+N_FFTS = 2048
+HOP_LENGTH = 512
+N_MELS = 512
+
+
+def store_dlc(fileLocations):
+    dlc_id = random_string(10)
+    tokenizer = GuitarTokenizer(
+        maxNumberOfSeconds=MAX_NO_OF_SECONDS,
+        timeStepsPerSecond=TIMESTEPS_PER_SECOND,
+        maxNumberOfTokensPerSection=MAX_TOKENS_PER_SECTION,
+        sample_rate=SAMPLE_RATE,
+        n_ffts=N_FFTS,
+        hop_length=HOP_LENGTH,
+        n_mels=N_MELS,
+    )
+    sections, parsedSong = tokenizer.getTokensAndSpectrogram(fileLocations)
+    return dlc_id, sections, fileLocations
 
 
 def main():
-    all_dlcs = get_all_dlc_files("../RSFiles/MiniDataset")
-    this_dlc = all_dlcs[0]
-    SAMPLE_RATE = 16000
-    y, sr = librosa.load(this_dlc["ogg"],sr=SAMPLE_RATE,duration=30)
-    S = librosa.feature.melspectrogram(y=y, sr=sr, n_mels=512)
-
-    print(S.shape)
-    fig, ax = plt.subplots()
-    S_dB = librosa.power_to_db(S, ref=np.max)
-    img = librosa.display.specshow(S_dB, x_axis='time',
-                                   y_axis='mel', sr=sr,  ax=ax)
-    fig.colorbar(img, ax=ax, format='%+2.0f dB')
-    ax.set(title='Mel-frequency spectrogram')
-    plt.show()
+    all_dlcs = get_all_dlc_files(DLC_Location)
+    tokenizer = GuitarTokenizer(
+        maxNumberOfSeconds=MAX_NO_OF_SECONDS,
+        timeStepsPerSecond=TIMESTEPS_PER_SECOND,
+        maxNumberOfTokensPerSection=MAX_TOKENS_PER_SECTION,
+        sample_rate=SAMPLE_RATE,
+        n_ffts=N_FFTS,
+        hop_length=HOP_LENGTH,
+        n_mels=N_MELS,
+    )
+    with h5py.File(
+            f'{TRAINSETS_LOCATION}/{train_set_name}_{get_timestamp()}_mTokens{MAX_TOKENS_PER_SECTION}_mNoS{MAX_NO_OF_SECONDS}.hdf5',
+            'w') as f:
+        songs = f.create_group("Songs")
+        processPool = ProcessPool(nodes=8)
+        results = processPool.imap(store_dlc, all_dlcs)
+        index = {}
+        for result in tqdm(results, desc="Generating Metas", total=len(all_dlcs)):
+            dlc_id, sections, fileLocations = result
+            for i, section in enumerate(sections):
+                thisSection = songs.create_group(f"{dlc_id}_{i}")
+                thisSection.create_dataset("tokens", data=np.array(section.tokens))
+                thisSection.create_dataset("mel", data=section.spectrogram)
+                thisSection.attrs["startSeconds"] = section.startSeconds
+                thisSection.attrs["stopSeconds"] = section.stopSeconds
+                thisSection.attrs["numTokens"] = len(section.tokens)
+                thisSection.attrs["melShape"] = section.spectrogram.shape
+                thisSection.attrs["timeInSeconds"] = section.stopSeconds - section.startSeconds
+                index[f"{dlc_id}_{i}"] = {}
+                index[f"{dlc_id}_{i}"]["startSeconds"] = section.startSeconds
+                index[f"{dlc_id}_{i}"]["stopSeconds"] = section.stopSeconds
+                index[f"{dlc_id}_{i}"]["numTokens"] = len(section.tokens)
+                index[f"{dlc_id}_{i}"]["melShape"] = section.spectrogram.shape
+                index[f"{dlc_id}_{i}"]["timeInSeconds"] = section.stopSeconds - section.startSeconds
+            index[f"{dlc_id}"] = json.dumps(fileLocations)
+        meta_group = f.create_group("Meta")
+        meta_group.attrs["index"] = json.dumps(index)
+        meta_group.attrs["maxNumberOfSeconds"] = MAX_NO_OF_SECONDS
+        meta_group.attrs["timeStepsPerSecond"] = TIMESTEPS_PER_SECOND
+        meta_group.attrs["maxNumberOfTokensPerSection"] = MAX_TOKENS_PER_SECTION
+        meta_group.attrs["sample_rate"] = SAMPLE_RATE
+        meta_group.attrs["n_ffts"] = N_FFTS
+        meta_group.attrs["hop_length"] = HOP_LENGTH
+        meta_group.attrs["n_mels"] = N_MELS
+        meta_group.attrs["vocab_size"] = tokenizer.numberOfTokens()
 
 
 if __name__ == '__main__':

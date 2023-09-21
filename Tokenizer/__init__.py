@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import sortedcontainers
 from pprint import pprint
 from TUtils import get_all_dlc_files
+import librosa
 
 
 def mergeDicts(dict1, dict2):
@@ -42,32 +43,35 @@ silenceEventHandler = Handler(
 arrangementEventHandler = Handler(
     "arrangement",
     [
-        EventVariable("guitarType",0,2),
-        EventVariable("specialization",0,2)
+        EventVariable("guitarType", 0, 2),
+        EventVariable("specialization", 0, 2)
     ]
 )
 
-validArrangementList = ["bass","bass2","bass3","lead", "lead2", "lead3", "rhythm", "rhythm2", "rhythm3"]
+validArrangementList = ["bass", "bass2", "bass3", "lead", "lead2", "lead3", "rhythm", "rhythm2", "rhythm3"]
 validArrangementDict = {x: index - (len(validArrangementList) / 2) for index, x in enumerate(validArrangementList)}
 arrangementTypeToInt = {
-    "bass" : 0,
-    "lead" : 1,
-    "rhythm" : 2,
+    "bass": 0,
+    "lead": 1,
+    "rhythm": 2,
 }
 
-def createArrangementEvent(arrangementType:str):
+
+def createArrangementEvent(arrangementType: str):
     if arrangementType not in validArrangementDict:
         raise Exception("Cannot parse this type of arrangement")
     if arrangementType[-1].isnumeric():
         specialization = int(arrangementType[-1])
-    else :
+    else:
         specialization = 0
     guitarType = ''.join([i for i in arrangementType if not i.isdigit()])
 
-    return "arrangement",[arrangementTypeToInt[guitarType],specialization]
+    return "arrangement", [arrangementTypeToInt[guitarType], specialization]
+
 
 def createSilenceEvent():
     return "silence", [0]
+
 
 noteStartEventHandler = Handler(
     "noteStart",
@@ -89,9 +93,9 @@ noteStartEventHandler = Handler(
 
 
 def createNoteStartEvent(string: int, fret: int, palm_mute: bool, hammer_on: bool, harmonic: bool, accent: bool,
-                         tap: bool,arrangement:str):
+                         tap: bool, arrangement: str):
     return "noteStart", [string, fret, 1 if palm_mute else 0, 1 if hammer_on else 0, 1 if harmonic else 0,
-                         1 if accent else 0, 1 if tap else 0], string,arrangement
+                         1 if accent else 0, 1 if tap else 0], string, arrangement
 
 
 noteEndEventHandler = Handler(
@@ -105,8 +109,8 @@ noteEndEventHandler = Handler(
 )
 
 
-def createNoteEndEvent(string: int, fret: int, pull_off: bool, unpitched_slide: bool,arrangement:str):
-    return "noteEnd", [string, fret, 1 if pull_off else 0, 1 if unpitched_slide else 0], string,arrangement
+def createNoteEndEvent(string: int, fret: int, pull_off: bool, unpitched_slide: bool, arrangement: str):
+    return "noteEnd", [string, fret, 1 if pull_off else 0, 1 if unpitched_slide else 0], string, arrangement
 
 
 noteBendEventHandler = Handler(
@@ -119,8 +123,8 @@ noteBendEventHandler = Handler(
 )
 
 
-def createNoteBendEvent(string: int, semi_tone: float, tap: bool, arrangement:str):
-    return "bend", [string, semi_tone, 1 if tap else 0], string,arrangement
+def createNoteBendEvent(string: int, semi_tone: float, tap: bool, arrangement: str):
+    return "bend", [string, semi_tone, 1 if tap else 0], string, arrangement
 
 
 endOfTieEventHandler = Handler(
@@ -156,17 +160,36 @@ class SongSection:
     startSeconds: float
     stopSeconds: float
     tokens: list[int]
+    spectrogram: np.core.multiarray
 
 
 class GuitarTokenizer:
-    def __init__(self, numberOfSeconds, timeStepsPerSecond):
-        self._numberOfSeconds = numberOfSeconds
+    def __init__(self,
+                 maxNumberOfSeconds=60,
+                 timeStepsPerSecond=100,
+                 maxNumberOfTokensPerSection=1024,
+                 sample_rate=16000,
+                 n_ffts=2048,
+                 hop_length=512,
+                 n_mels=512,
+                 maxNumberOfFrames: int = None
+                 ):
+        if maxNumberOfFrames is not None:
+            maxNumberOfSeconds = librosa.frames_to_time(maxNumberOfFrames, sr=sample_rate, hop_length=hop_length,
+                                                        n_fft=n_ffts)
+        self._numberOfSeconds = maxNumberOfSeconds
+        self.maxNumberOfSeconds = maxNumberOfSeconds
         self._timeStepsPerSecond = timeStepsPerSecond
         self.minTimeForNotes = 1 / timeStepsPerSecond
+        self.sample_rate = sample_rate
+        self.n_ffts = n_ffts
+        self.hop_length = hop_length
+        self.n_mels = n_mels
         self._timeEventHandler = Handler(
             "time",
-            [generateTimeRange(numberOfSeconds, timeStepsPerSecond)]
+            [generateTimeRange(maxNumberOfSeconds, timeStepsPerSecond)]
         )
+        self.maxNumberOfTokensPerSection = maxNumberOfTokensPerSection
         self.encoder = Encoder([
             startOfSequenceEventHandler,
             self._timeEventHandler,
@@ -238,7 +261,7 @@ class GuitarTokenizer:
                     )
                 )
 
-    def processAndAddChords(self, sortedEvents, c, chordTemplates,arrangement):
+    def processAndAddChords(self, sortedEvents, c, chordTemplates, arrangement):
         chord: dict = c
         chordTime = float(chord["time"])
         chordAttributes = chord.copy()
@@ -249,27 +272,28 @@ class GuitarTokenizer:
             # do for every chordNote
             for n in chord["chordNotes"]:
                 note = mergeDicts(chordAttributes, n)
-                self.processAndAddNote(sortedEvents, note,arrangement)
+                self.processAndAddNote(sortedEvents, note, arrangement)
         else:
             # do for every note chordId
             chordId = int(chord["chordId"])
             for n in chordTemplates[chordId]["notes"]:
                 note = mergeDicts(chordAttributes, n)
-                self.processAndAddNote(sortedEvents, note,arrangement)
+                self.processAndAddNote(sortedEvents, note, arrangement)
 
-    def convertSongFromPaths(self,pathsDict:dict):
+    @staticmethod
+    def convertPathsToParsedFiles(pathsDict):
         input_paths = {}
         for key in pathsDict.keys():
             if key in validArrangementList:
                 input_paths[key] = pathsDict[key]
         loaded_files = {}
-        for key,path in input_paths.items():
+        for key, path in input_paths.items():
             loaded_files[key] = parse_xml_file(path)
-        return self.convertSongFromParsedFiles(loaded_files)
+        return loaded_files
 
-    def convertSongFromParsedFiles(self, loaded_files:dict):
+    def getTokensAndSpectrogram(self, filePaths):
+        loaded_files = self.convertPathsToParsedFiles(filePaths)
         sortedEvents = sortedcontainers.SortedDict()
-
         for arrangementKey in loaded_files.keys():
             for chordTemplate in loaded_files[arrangementKey]["chordTemplates"]:
                 filtered_dict = {k: v for (k, v) in chordTemplate.items() if "fret" in k}
@@ -281,87 +305,101 @@ class GuitarTokenizer:
         for arrangementKey in loaded_files.keys():
             loadedFile = loaded_files[arrangementKey]
             for n in loadedFile["notes"]:
-                self.processAndAddNote(sortedEvents, n,arrangementKey)
+                self.processAndAddNote(sortedEvents, n, arrangementKey)
 
             for c in loadedFile["chords"]:
-                self.processAndAddChords(sortedEvents, c, loadedFile["chordTemplates"],arrangementKey)
+                self.processAndAddChords(sortedEvents, c, loadedFile["chordTemplates"], arrangementKey)
 
         sections = []
-
+        y, sr = librosa.load(filePaths["ogg"], sr=self.sample_rate, mono=True)
+        S = librosa.feature.melspectrogram(y=y,
+                                           sr=sr,
+                                           n_fft=self.n_ffts,
+                                           n_mels=self.n_mels,
+                                           hop_length=self.hop_length)
         lastOpenNotesForArrangement = {}
         for arrangementKey in loaded_files.keys():
-            lastOpenNotesForArrangement[arrangementKey] = [None]*6
-
+            lastOpenNotesForArrangement[arrangementKey] = [None] * 6
         arrangementsInSong = list(loaded_files.keys())
         songLength = float(loaded_files[arrangementsInSong[0]]["songLength"])
-        timeRange = np.arange(0.0, songLength, self._numberOfSeconds)
         sortedEventsAsList = sortedEvents.keys()
-        if timeRange[-1] != songLength:
-            timeRange = np.append(timeRange, [songLength])
-        for index in range(1, len(timeRange)):
-            startTime = timeRange[index - 1]
-            stopTime = timeRange[index]
-            startLocation = sortedEvents.bisect_left(startTime)
-            endLocation = sortedEvents.bisect_right(stopTime) - 1
-            lastArrangement = None
-            tokens = [self.encoder.encode(*createStartOfSeqEvent())]
 
-            # add all already open notes
-            for arrangementKey in loaded_files.keys():
-                if any(lastOpenNotesForArrangement[arrangementKey]):
-                    lastArrangement = arrangementKey
-                    tokens.append(self.encoder.encode(*createArrangementEvent(arrangementKey)))
-                    for noteData in lastOpenNotesForArrangement[arrangementKey]:
-                        if noteData is not None:
-                            tokens.append(self.encoder.encode("noteStart", noteData))
+        startTime = 0.0
+        startSpectrogramIndex = 0
+        tokens = [self.encoder.encode(*createStartOfSeqEvent())]
+        lastArrangement = None
 
-            tokens.append(self.encoder.encode(*createEndOfTieEvent()))
+        for eventTime in sortedEventsAsList:
+            # check if i need to make a new section
+            if len(tokens) > self.maxNumberOfTokensPerSection or (eventTime - startTime) > self.maxNumberOfSeconds:
+                # check for silence
+                if len(tokens) == 2:
+                    tokens.append(self.encoder.encode(*createSilenceEvent()))
+                tokens.append(self.encoder.encode(*createEndOfSeqEvent()))
+                numberOfFrames = librosa.core.time_to_frames(eventTime - startTime,
+                                                             sr=self.sample_rate,
+                                                             hop_length=self.hop_length,
+                                                             n_fft=self.n_ffts)
+                thisSectionSpectrogram = S[:, startSpectrogramIndex:startSpectrogramIndex + numberOfFrames]
+                this_section = SongSection(startTime, eventTime, tokens, thisSectionSpectrogram)
+                sections.append(this_section)
+                startTime = eventTime
+                startSpectrogramIndex = startSpectrogramIndex + numberOfFrames
+                tokens = [self.encoder.encode(*createStartOfSeqEvent())]
+                # add open notes to the new section
+                for arrangementKey in loaded_files.keys():
+                    if any(lastOpenNotesForArrangement[arrangementKey]):
+                        lastArrangement = arrangementKey
+                        tokens.append(self.encoder.encode(*createArrangementEvent(arrangementKey)))
+                        for noteData in lastOpenNotesForArrangement[arrangementKey]:
+                            if noteData is not None:
+                                tokens.append(self.encoder.encode("noteStart", noteData))
+                tokens.append(self.encoder.encode(*createEndOfTieEvent()))
 
-            for i in range(startLocation, endLocation + 1):
-                currentTime = sortedEventsAsList[i]
+            tokens.append(self.encoder.encode(*createTimeEvent(eventTime - startTime)))
 
-                # emit time start token
-                tokens.append(self.encoder.encode(*createTimeEvent(currentTime - startTime)))
+            for event in sortedEvents[eventTime]["bend"]:
+                if lastArrangement != event[3]:
+                    tokens.append(self.encoder.encode(*createArrangementEvent(event[3])))
+                    lastArrangement = event[3]
+                tokens.append(self.encoder.encode(*event))
+            # end notes
+            for event in sortedEvents[eventTime]["end"]:
+                if lastArrangement != event[3]:
+                    tokens.append(self.encoder.encode(*createArrangementEvent(event[3])))
+                    lastArrangement = event[3]
+                lastOpenNotesForArrangement[event[3]][event[2]] = None
+                tokens.append(self.encoder.encode(*event))
 
-                # bend if any first
-                for event in sortedEvents[currentTime]["bend"]:
-                    if lastArrangement != event[3]:
-                        tokens.append(self.encoder.encode(*createArrangementEvent(event[3])))
-                        lastArrangement = event[3]
-                    tokens.append(self.encoder.encode(*event))
-                # end notes
-                for event in sortedEvents[currentTime]["end"]:
-                    if lastArrangement != event[3]:
-                        tokens.append(self.encoder.encode(*createArrangementEvent(event[3])))
-                        lastArrangement = event[3]
-                    lastOpenNotesForArrangement[event[3]][event[2]] = None
-                    tokens.append(self.encoder.encode(*event))
+            # then write all new notes
+            for event in sortedEvents[eventTime]["start"]:
+                if lastArrangement != event[3]:
+                    tokens.append(self.encoder.encode(*createArrangementEvent(event[3])))
+                    lastArrangement = event[3]
+                tokens.append(self.encoder.encode(*event))
+                lastOpenNotesForArrangement[event[3]][event[2]] = event[1]
 
-                # then write all new notes
-                for event in sortedEvents[currentTime]["start"]:
-                    if lastArrangement != event[3]:
-                        tokens.append(self.encoder.encode(*createArrangementEvent(event[3])))
-                        lastArrangement = event[3]
-                    tokens.append(self.encoder.encode(*event))
-                    lastOpenNotesForArrangement[event[3]][event[2]] = event[1]
+        # check and finish last section
+        if len(tokens) == 2:
+            tokens.append(self.encoder.encode(*createSilenceEvent()))
+        tokens.append(self.encoder.encode(*createEndOfSeqEvent()))
+        thisSectionSpectrogram = S[:, startSpectrogramIndex:]
+        lastSection = SongSection(startTime, songLength, tokens, thisSectionSpectrogram)
+        sections.append(lastSection)
+        return sections,loaded_files
 
-            # check for silence
-            if len(tokens) == 2:
-                tokens.append(self.encoder.encode(*createSilenceEvent()))
-            tokens.append(self.encoder.encode(*createEndOfSeqEvent()))
-            sections.append(SongSection(startTime, stopTime, tokens))
 
-        # for section in sections:
-        #     print(section.startSeconds,section.stopSeconds)
-        #     for toke in section.tokens:
-        #         pprint(self.encoder.decode(toke))
-        return sections
-
-if __name__ == '__main__':
+def test():
     all_dlcs = get_all_dlc_files("../RSFiles/MiniDataset")
     sections = []
-    tokenizer = GuitarTokenizer(30, 100)
-    for dlc in all_dlcs:
-        print(dlc)
-        sections.append(tokenizer.convertSongFromPaths(dlc))
-    # pprint(tokenizer.convertSongFromPath(all_dlcs[4]["lead"]))
+    tokenizer = GuitarTokenizer(30, 50)
+    sections,parsedSong = tokenizer.getTokensAndSpectrogram(all_dlcs[0])
+    for section in sections:
+        print(
+            f"sTime:{section.startSeconds} eTime:{section.stopSeconds} length:{section.stopSeconds - section.startSeconds} lengthToken:{len(section.tokens)} shapeSpec:{section.spectrogram.shape}")
+        for token in section.tokens:
+            print(tokenizer.encoder.decode(token))
+
+
+if __name__ == '__main__':
+    test()
