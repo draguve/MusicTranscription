@@ -5,6 +5,8 @@ import torchdata.datapipes.iter as tdi
 import h5py
 import json
 
+from Tokenizer.loaderH5 import H5GuitarTokenizer
+
 
 class TranscriptionDataset(torchdata.datapipes.map.MapDataPipe):
     def __init__(self, dataset_file):
@@ -47,7 +49,8 @@ def datasetCollateFn(all_data):
     return np.stack(all_mels), np.stack(all_src_masks), np.stack(all_tokens), np.stack(all_tgt_masks)
 
 
-def getDataPipe(datasetLocation, batchSize=10, shuffleBufferSize=1000, postBucketShuffle=100, prefetchSize=None,pinMemory=False):
+def getDataPipe(datasetLocation, batchSize=10, shuffleBufferSize=1000, postBucketShuffle=100, prefetchSize=None,
+                pinMemory=False):
     pipe = TranscriptionDataset(datasetLocation)
     pipe = pipe.to_iter_datapipe().shuffle(buffer_size=shuffleBufferSize)
     pipe = tdi.BucketBatcher(
@@ -66,9 +69,15 @@ def getDataPipe(datasetLocation, batchSize=10, shuffleBufferSize=1000, postBucke
 
 
 def test():
-    pipe = getDataPipe("../Trainsets/S_Tier_1695289757_mTokens1000_mNoS60.hdf5", 10)
+    dataset = "../Trainsets/S_Tier_1695289757_mTokens1000_mNoS60.hdf5"
+    tokenizer = H5GuitarTokenizer(dataset)
+    pipe = getDataPipe(dataset, 10)
     for data in pipe:
         print([i.shape for i in data])
+        for x in data[2]:
+            for y in x:
+                print(tokenizer.encoder.decode(y))
+        break
 
 
 if __name__ == '__main__':
