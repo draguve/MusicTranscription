@@ -8,6 +8,7 @@ arrangementIndex = {x: index - (len(arrangementsToConvert) / 2) for index, x in 
 def getTuningFromString(input_data):
     return [int(offset) for offset in sortedcontainers.SortedDict(input_data).values()]
 
+
 def getTuning(offsets: list[int]):
     assert len(offsets) == 6
     return torch.Tensor(offsets)
@@ -15,7 +16,7 @@ def getTuning(offsets: list[int]):
 
 def getArrangementTensor(tuning: torch.tensor, arrangement: str, capo: float) -> torch.tensor:
     return torch.cat((tuning, torch.Tensor([arrangementIndex[arrangement]]),
-               torch.Tensor([float(capo)])))
+                      torch.Tensor([float(capo)])))
 
 
 E_Standard = getTuning([0] * 6)
