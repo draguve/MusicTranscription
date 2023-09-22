@@ -34,6 +34,7 @@ class GuitarTokenDataset(torchdata.datapipes.iter.IterDataPipe):
         if worker is not None:
             split_size = len(self.keys) // worker.num_workers
             self.keys = self.keys[worker.id * split_size:(worker.id + 1) * split_size]
+        np.random.shuffle(self.keys)
         h5file = h5py.File(self.datasetFile, "r")
         for key in range(self.keys.shape[0]):
             sectionGroup = h5file[f"/Songs/{self.keys[key]}"]
@@ -46,12 +47,13 @@ class GuitarTokenDataset(torchdata.datapipes.iter.IterDataPipe):
         return self.lengthOfDataset
 
 
-def getDataPipe(datasetLocation, contextSize=2, shuffleBufferSize=50000, prefetchSize=None,
+def getDataPipe(datasetLocation, contextSize=2,
                 pinMemory=False):
     dataset = GuitarTokenDataset(datasetLocation, contextSize)
-    pipe = dataset.shuffle(buffer_size=shuffleBufferSize)
-    if prefetchSize is not None:
-        pipe = tdi.Prefetcher(pipe, prefetchSize)
+    pipe = dataset
+    # pipe = dataset.shuffle(buffer_size=shuffleBufferSize)
+    # if prefetchSize is not None:
+        # pipe = tdi.Prefetcher(pipe, prefetchSize)
     if pinMemory:
         pipe = tdi.PinMemory(pipe)
     return dataset, pipe
