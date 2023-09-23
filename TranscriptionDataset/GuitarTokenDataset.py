@@ -68,9 +68,10 @@ def getDataPipe(datasetLocation, contextSize=2,
 
 
 def test():
-    dataset = "../Trainsets/S_Tier_1695289757_mTokens1000_mNoS60.hdf5"
+    dataset = "../Trainsets/TokensOnly_1695456272_mTokens1000_mNoS60.hdf5"
     # tokenizer = H5GuitarTokenizer(dataset)
     dataset, pipe = getDataPipe(dataset, 2)
+    print(dataset.cfs)
     train_dl = DataLoader(dataset=pipe, batch_size=64, num_workers=2)
     for i in train_dl:
         print(i)
