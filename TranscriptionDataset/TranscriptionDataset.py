@@ -4,7 +4,6 @@ import torchdata
 import torchdata.datapipes.iter as tdi
 import h5py
 import json
-
 from Tokenizer.loaderH5 import H5GuitarTokenizer
 
 
@@ -69,7 +68,7 @@ def getDataPipe(datasetLocation, batchSize=10, shuffleBufferSize=1000, postBucke
 
 
 def test():
-    dataset = "../Trainsets/S_Tier_1695289757_mTokens1000_mNoS60.hdf5"
+    dataset = "../Trainsets/TokensOnly_1695456272_mTokens1000_mNoS60.hdf5"
     tokenizer = H5GuitarTokenizer(dataset)
     pipe = getDataPipe(dataset, 10)
     for data in pipe:
