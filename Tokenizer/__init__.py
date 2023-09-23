@@ -296,10 +296,10 @@ class GuitarTokenizer:
                 loaded_files[key] = temp_file
         return loaded_files
 
-    def getTokensAndSpectrogram(self, filePaths):
+    def getTokensAndSpectrogram(self, filePaths, spectrogram=True):
         loaded_files = self.convertPathsToParsedFiles(filePaths)
         if len(loaded_files) == 0:
-            return None,None
+            return None, None
         sortedEvents = sortedcontainers.SortedDict()
         for arrangementKey in loaded_files.keys():
             for chordTemplate in loaded_files[arrangementKey]["chordTemplates"]:
@@ -318,12 +318,14 @@ class GuitarTokenizer:
                 self.processAndAddChords(sortedEvents, c, loadedFile["chordTemplates"], arrangementKey)
 
         sections = []
-        y, sr = librosa.load(filePaths["ogg"], sr=self.sample_rate, mono=True)
-        S = librosa.feature.melspectrogram(y=y,
-                                           sr=sr,
-                                           n_fft=self.n_ffts,
-                                           n_mels=self.n_mels,
-                                           hop_length=self.hop_length)
+        y, sr, S = None, None, None
+        if spectrogram:
+            y, sr = librosa.load(filePaths["ogg"], sr=self.sample_rate, mono=True)
+            S = librosa.feature.melspectrogram(y=y,
+                                               sr=sr,
+                                               n_fft=self.n_ffts,
+                                               n_mels=self.n_mels,
+                                               hop_length=self.hop_length)
         lastOpenNotesForArrangement = {}
         for arrangementKey in loaded_files.keys():
             lastOpenNotesForArrangement[arrangementKey] = [None] * 6
@@ -347,7 +349,10 @@ class GuitarTokenizer:
                                                              sr=self.sample_rate,
                                                              hop_length=self.hop_length,
                                                              n_fft=self.n_ffts)
-                thisSectionSpectrogram = S[:, startSpectrogramIndex:startSpectrogramIndex + numberOfFrames]
+                if spectrogram:
+                    thisSectionSpectrogram = S[:, startSpectrogramIndex:startSpectrogramIndex + numberOfFrames]
+                else:
+                    thisSectionSpectrogram = None
                 this_section = SongSection(startTime, eventTime, tokens, thisSectionSpectrogram)
                 sections.append(this_section)
                 startTime = eventTime
@@ -390,7 +395,10 @@ class GuitarTokenizer:
         if len(tokens) == 2:
             tokens.append(self.encoder.encode(*createSilenceEvent()))
         tokens.append(self.encoder.encode(*createEndOfSeqEvent()))
-        thisSectionSpectrogram = S[:, startSpectrogramIndex:]
+        if spectrogram:
+            thisSectionSpectrogram = S[:, startSpectrogramIndex:]
+        else:
+            thisSectionSpectrogram = None
         lastSection = SongSection(startTime, songLength, tokens, thisSectionSpectrogram)
         sections.append(lastSection)
         return sections, loaded_files
