@@ -1,11 +1,13 @@
 import torch
 from torch import optim, nn, utils, Tensor
 import lightning.pytorch as pl
-import PositionalEncoding
+from PositionalEncoding import PositionalEncoding
+from TModel.GuitarTokenEmbeddingModel import GuitarTokenEmbeddingModel
+from TranscriptionDataset.TranscriptionDataset import getDataPipe
 
 
 class TranscriptionTransformerModel(pl.LightningModule):
-    def __init__(self, vocabSize, d_model=512, d_ff=512, dropout=0.1):
+    def __init__(self, vocabSize, d_model=512, d_ff=512, dropout=0.1, embeddingCheckpoint=None):
         super().__init__()
         # inputTransformation =
         self.d_model = d_model
@@ -20,11 +22,14 @@ class TranscriptionTransformerModel(pl.LightningModule):
             num_decoder_layers=6,
             dropout=self.dropout,
             activation=nn.functional.gelu,
-            batch_first=True,
         )
-        self.tgt_embedding = nn.Embedding(self.vocabSize, d_model)
+        if embeddingCheckpoint is None:
+            self.tgt_embedding = nn.Embedding(self.vocabSize, d_model)
+        else:
+            embeddingModel = GuitarTokenEmbeddingModel.load_from_checkpoint(embeddingCheckpoint)
+            self.tgt_embedding = embeddingModel.embeddings
         self.outputNorm = nn.Linear(d_model, vocabSize)
-        self.loss = torch.nn.CrossEntropyLoss()
+        self.loss = torch.nn.CrossEntropyLoss(ignore_index=0)
 
     def init_weights(self) -> None:
         initrange = 0.1
@@ -38,8 +43,8 @@ class TranscriptionTransformerModel(pl.LightningModule):
                 trg: Tensor,
                 tgt_mask: Tensor,
                 tgt_padding_mask: Tensor):
-        src_emb_pos = self.positional_encoding(src_emb)
-        tgt_emb_pos = self.positional_encoding(self.positionalEncoding(trg))
+        src_emb_pos = self.positionalEncoding(src_emb)
+        tgt_emb_pos = self.positionalEncoding(self.tgt_embedding(trg))
         outs = self.transformer_model(
             src=src_emb_pos,
             src_mask=src_mask,
@@ -59,17 +64,33 @@ class TranscriptionTransformerModel(pl.LightningModule):
             tgt_mask)
 
     def training_step(self, batch, batch_idx):
-        # training_step defines the train loop.
-        # it is independent of forward
-        x, y = batch
-        x = x.view(x.size(0), -1)
-        z = self.encoder(x)
-        x_hat = self.decoder(z)
-        loss = nn.functional.mse_loss(x_hat, x)
-        # Logging to TensorBoard (if installed) by default
-        self.log("train_loss", loss)
+        all_mels, src_mask, src_pad_mask, all_tokens, tgt_mask, tgt_pad_mask, tokens_out = batch
+        logits = self.forward(all_mels, src_mask, src_pad_mask, all_tokens, tgt_mask, tgt_pad_mask)
+        loss = self.loss(logits.reshape(-1, logits.shape[-1]), tokens_out.reshape(-1))
+        self.log("train_loss", loss, prog_bar=True)
+        return loss
+
+    def test_step(self, batch, batch_idx):
+        all_mels, src_mask, src_pad_mask, all_tokens, tgt_mask, tgt_pad_mask, tokens_out = batch
+        logits = self.forward(all_mels, src_mask, src_pad_mask, all_tokens, tgt_mask, tgt_pad_mask)
+        loss = self.loss(logits.reshape(-1, logits.shape[-1]), tokens_out.reshape(-1))
+        self.log("test_loss", loss, prog_bar=True)
         return loss
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.transformer_model.parameters(), lr=0.0001, betas=(0.9, 0.98), eps=1e-9)
         return optimizer
+
+
+def test():
+    datasetLocation = "../Trainsets/S_Tier_1695428558_mTokens1000_mNoS60.hdf5"
+    dataset, pipe = getDataPipe(datasetLocation, 2)
+    model = TranscriptionTransformerModel(dataset.getVocabSize())
+    itx = iter(pipe)
+    x = next(itx)
+    test_loss = model.training_step(x, 10)
+    print(test_loss)
+
+
+if __name__ == '__main__':
+    test()
