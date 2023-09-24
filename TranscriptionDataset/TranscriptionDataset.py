@@ -6,7 +6,8 @@ import torchdata
 import torchdata.datapipes.iter as tdi
 import h5py
 import json
-
+import torch.nn.utils.rnn.pad_sequence
+from torch import Tensor
 from torch.utils.data import get_worker_info, DataLoader
 from tqdm import tqdm
 
@@ -45,7 +46,7 @@ class TranscriptionDataset(torchdata.datapipes.iter.IterDataPipe):
             yield mel, tokens
 
     def __len__(self):
-        return math.ceil(self.lengthOfDataset / self.batchSize)+1
+        return math.ceil(self.lengthOfDataset / self.batchSize) + 1
 
 
 def bucketBatcherSort(data):
@@ -59,6 +60,8 @@ def datasetCollateFn(all_data):
     all_tokens = []
     all_src_masks = []
     all_tgt_masks = []
+    src_mask = generate_square_subsequent_mask(max_mel_size)
+    tgt_mask = generate_square_subsequent_mask(max_token_size)
     for item in all_data:
         mel, tokens = item
         src_seq_mask = np.zeros(max_mel_size, dtype=bool)
@@ -69,7 +72,8 @@ def datasetCollateFn(all_data):
         tgt_seq_mask[tokens.shape[0]:] = True
         all_tgt_masks.append(tgt_seq_mask)
         all_tokens.append(np.concatenate((tokens, np.zeros(max_token_size - tokens.shape[0], dtype=tokens.dtype))))
-    return np.stack(all_mels), np.stack(all_src_masks), np.stack(all_tokens), np.stack(all_tgt_masks)
+    return np.stack(all_mels), src_mask, np.stack(all_src_masks), np.stack(all_tokens), tgt_mask, np.stack(
+        all_tgt_masks)
 
 
 def getDataPipe(datasetLocation, batchSize=10, prefetchSize=None, pinMemory=False):
@@ -88,13 +92,20 @@ def getDataPipe(datasetLocation, batchSize=10, prefetchSize=None, pinMemory=Fals
     return dataset, pipe
 
 
+def generate_square_subsequent_mask(sz: int, device='cpu') -> Tensor:
+    r"""Generate a square mask for the sequence. The masked positions are filled with float('-inf').
+        Unmasked positions are filled with float(0.0).
+    """
+    return torch.triu(torch.full((sz, sz), float('-inf'), device=device), diagonal=1)
+
+
 def test():
     datasetLocation = "../Trainsets/S_Tier_1695428558_mTokens1000_mNoS60.hdf5"
     tokenizer = H5GuitarTokenizer(datasetLocation)
     dataset, pipe = getDataPipe(datasetLocation, 10)
-    train_dl = DataLoader(dataset=pipe, num_workers=4)
+    train_dl = DataLoader(dataset=pipe)
     for i in tqdm(train_dl, total=len(dataset)):
-        continue
+        print([(j.shape, j.dtype) for j in i])
 
 
 if __name__ == '__main__':
