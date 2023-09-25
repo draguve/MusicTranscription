@@ -12,17 +12,18 @@ import h5py
 
 from Tokenizer import GuitarTokenizer
 
-DLC_Location = r"E:\Rocksmith - Copy\Downloads"
+DLC_Location = r"C:\Users\ritwi\Github\MusicTranscription\RSFiles\Downloads2"
 TRAINSETS_LOCATION = "../Trainsets"
 train_set_name = "S_Tier"
-MAX_NO_OF_SECONDS = 60
+MAX_NO_OF_SECONDS = 5
 TIMESTEPS_PER_SECOND = 50
-MAX_TOKENS_PER_SECTION = 1000
+MAX_TOKENS_PER_SECTION = 400
 SAMPLE_RATE = 16000
 N_FFTS = 2048
 HOP_LENGTH = 512
 N_MELS = 512
-SPECTROGRAM = False
+# MAX_NO_OF_SPECTOGRAM_FRAMES = 256
+SPECTROGRAM = True
 
 
 def store_dlc(fileLocations):
@@ -52,6 +53,7 @@ def main():
         maxNumberOfSeconds=MAX_NO_OF_SECONDS,
         timeStepsPerSecond=TIMESTEPS_PER_SECOND,
         maxNumberOfTokensPerSection=MAX_TOKENS_PER_SECTION,
+        # maxNumberOfFrames=MAX_NO_OF_SPECTOGRAM_FRAMES,
         sample_rate=SAMPLE_RATE,
         n_ffts=N_FFTS,
         hop_length=HOP_LENGTH,
@@ -77,6 +79,7 @@ def main():
                 this_cfs = np.bincount(tokens, minlength=tokenizer.numberOfTokens())
                 cfs = cfs + this_cfs
                 thisSection.create_dataset("tokens", data=tokens)
+                section_index[f"{dlc_id}_{i}"] = {}
                 if SPECTROGRAM:
                     spectrogram = np.transpose(section.spectrogram, (1, 0))
                     thisSection.create_dataset("mel", data=spectrogram)
@@ -86,7 +89,6 @@ def main():
                 thisSection.attrs["stopSeconds"] = section.stopSeconds
                 thisSection.attrs["numTokens"] = len(section.tokens)
                 thisSection.attrs["timeInSeconds"] = section.stopSeconds - section.startSeconds
-                section_index[f"{dlc_id}_{i}"] = {}
                 section_index[f"{dlc_id}_{i}"]["startSeconds"] = section.startSeconds
                 section_index[f"{dlc_id}_{i}"]["stopSeconds"] = section.stopSeconds
                 section_index[f"{dlc_id}_{i}"]["numTokens"] = len(section.tokens)
