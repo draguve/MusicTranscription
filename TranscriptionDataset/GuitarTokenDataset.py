@@ -51,9 +51,6 @@ class GuitarTokenDataset(torchdata.datapipes.iter.IterDataPipe):
                 for j in range(i + 1, i + self.contextSize + 1):
                     yield torch.tensor(tokens[j]), torch.tensor(tokens[i], dtype=torch.long)
 
-    # def __len__(self):
-    #     return self.lengthOfDataset
-
 
 def getDataPipe(datasetLocation, contextSize=2,
                 pinMemory=False):
