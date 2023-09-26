@@ -43,6 +43,7 @@ class TranscriptionDataset(torchdata.datapipes.iter.IterDataPipe):
         for key in range(self.keys.shape[0]):
             sectionGroup = h5file[f"/Songs/{self.keys[key]}"]
             mel = torch.from_numpy(sectionGroup["mel"][...])
+            mel = torch.cat((mel, torch.full((1, mel.shape[1]), -1.0, dtype=mel.dtype)))
             src_pad_mask = torch.full((mel.shape[0],), False, dtype=torch.bool)
             tokens = torch.from_numpy(sectionGroup["tokens"][...]).long()
             tokens_in = tokens[:-1]
@@ -99,6 +100,7 @@ def test():
     train_dl = DataLoader(dataset=pipe, num_workers=0)
     for i in tqdm(train_dl, total=len(dataset)):
         # pprint([(j.shape, j.dtype) for j in i])
+        print(i)
         continue
 
 
