@@ -1,7 +1,7 @@
 from torch import nn
 
 from Externals.RetNet.src.retention import MultiScaleRetention
-from decoder_retention import MultiScaleDecoderRetention
+from TModel.Retnet.decoder_retention import MultiScaleDecoderRetention
 from TranscriptionDataset.TranscriptionDataset import getDataPipe
 
 

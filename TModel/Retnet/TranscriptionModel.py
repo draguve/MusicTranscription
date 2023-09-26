@@ -30,6 +30,7 @@ class TranscriptionRetnetModel(pl.LightningModule):
             self.tgt_embedding = embeddingModel.embeddings
         self.outputLinear = nn.Linear(d_model, vocabSize)
         self.loss = torch.nn.CrossEntropyLoss(ignore_index=0)
+        self.save_hyperparameters()
 
     def init_weights(self) -> None:
         initrange = 0.1
@@ -63,7 +64,7 @@ class TranscriptionRetnetModel(pl.LightningModule):
 
     def configure_optimizers(self):
         # optimizer = torch.optim.Adam(self.transformer_model.parameters(), lr=0.001, betas=(0.9, 0.98), eps=1e-9)
-        optimizer = torch.optim.AdamW(self.transformer_model.parameters(), lr=1e-5)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-5)
         return optimizer
 
 
