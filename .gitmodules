@@ -1,0 +1,3 @@
+[submodule "Externals/RetNet"]
+	path = Externals/RetNet
+	url = https://github.com/Jamie-Stirling/RetNet.git
