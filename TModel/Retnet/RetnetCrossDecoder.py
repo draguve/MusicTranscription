@@ -39,9 +39,7 @@ class RetNetCrossLayer(nn.Module):
         self.activation = activation
         self.norm_first = norm_first
         # retention block
-        self.norm1 = nn.LayerNorm(
-            d_model, eps=layer_norm_eps, device=device, dtype=dtype
-        )
+
         self.self_retention = MultiScaleRetention(  # type: ignore
             embed_dim=d_model,
             num_heads=nhead,
@@ -58,13 +56,16 @@ class RetNetCrossLayer(nn.Module):
             device=device,
             dtype=dtype,
         )
-        # feedforward block
+        self.norm1 = nn.LayerNorm(
+            d_model, eps=layer_norm_eps, device=device, dtype=dtype
+        )
         self.norm2 = nn.LayerNorm(
             d_model, eps=layer_norm_eps, device=device, dtype=dtype
         )
         self.norm3 = nn.LayerNorm(
             d_model, eps=layer_norm_eps, device=device, dtype=dtype
         )
+        # feedforward block
         self.linear1 = nn.Linear(d_model, dim_feedforward, device=device, dtype=dtype)
         self.linear2 = nn.Linear(dim_feedforward, d_model, device=device, dtype=dtype)
 
@@ -85,13 +86,13 @@ class RetNetCrossLayer(nn.Module):
         return x
 
     def forward_parallel(self, x: Tensor, mem: Tensor) -> Tensor:
-        def _retention_block(x: Tensor) -> Tensor:
-            x, _ = self.self_retention.forward_parallel(x, x, x)
-            return self.dropout(x)
+        def _retention_block(inputT: Tensor) -> Tensor:
+            inputT, _ = self.self_retention.forward_parallel(inputT, inputT, inputT)
+            return self.dropout(inputT)
 
-        def _cross_retention_block(x: Tensor, mem: Tensor):
-            x, _ = self.cross_retention.forward_parallel(x, mem, mem)
-            return self.dropout(x)
+        def _cross_retention_block(inputT: Tensor, memory: Tensor):
+            inputT, _ = self.cross_retention.forward_parallel(inputT, memory, memory)
+            return self.dropout(inputT)
 
         if self.norm_first:
             x = x + _retention_block(self.norm1(x))
@@ -142,76 +143,5 @@ class RetNetCrossDecoder(nn.Module):
     ) -> Tuple[Tensor, List[Tensor]]:
         raise NotImplementedError()
 
-    def forward(self, x: Tensor) -> Tensor:
-        return self.forward_parallel(x)
-
-
-class RetNetEncoderDecoder(nn.Module):
-    def __init__(
-            self,
-            num_tokens: int,  # usually obtained from the tokenizer
-            d_model: int = 512,
-            nhead: int = 8,
-            num_layers: int = 6,
-            dropout: float = 0.1,
-            activation: Union[ActivationString, Callable[[Tensor], Tensor]] = "swish",
-            dim_feedforward: int = 2048,
-            norm_first: bool = True,
-            layer_norm_eps: float = 1e-6,
-            device: Optional[Union[torch.device, str]] = None,
-            dtype: Optional[torch.dtype] = None,
-    ) -> None:
-        super().__init__()
-        self.d_model = d_model
-        self.num_layers = num_layers
-        self.embedding = nn.Embedding(num_tokens, d_model, device=device, dtype=dtype)
-        decoder_layer = RetNetCrossLayer(
-            d_model,
-            nhead,
-            dropout=dropout,
-            activation=activation,
-            dim_feedforward=dim_feedforward,
-            norm_first=norm_first,
-            layer_norm_eps=layer_norm_eps,
-            device=device,
-            dtype=dtype,
-        )
-        self.decoder = RetNetCrossDecoder(decoder_layer, num_layers)
-        self.out = nn.Linear(d_model, num_tokens, device=device, dtype=dtype)
-
-        self._reset_parameters()
-
-    def _reset_parameters(self):
-        nn.init.xavier_normal_(self.out.weight)
-        nn.init.constant_(self.out.bias, 0)
-
-    def forward_parallel(self, x: Tensor) -> Tensor:
-        x = self.embedding(x)
-        x = self.decoder.forward_parallel(x)
-        x = self.out(x)
-        return x
-
-    def forward_recurrent(
-            self, x: Tensor, seq_idx: int, prev_states: Sequence[Optional[Tensor]] = ()
-    ) -> Tuple[Tensor, List[Tensor]]:
-        x = self.embedding(x)
-        x, states = self.decoder.forward_recurrent(
-            x, seq_idx=seq_idx, prev_states=prev_states
-        )
-        x = self.out(x)
-        return x, states
-
-    def forward_chunkwise(
-            self, x: Tensor, start_idx: int, prev_states: Sequence[Optional[Tensor]] = ()
-    ) -> Tuple[Tensor, List[Tensor]]:
-        x = self.embedding(x)
-        x, states = self.decoder.forward_chunkwise(
-            x, start_idx=start_idx, prev_states=prev_states
-        )
-        x = self.out(x)
-        return x, states
-
-    def forward(self, inputs: Tensor, labels: Tensor) -> Tensor:
-        pred = self.forward_parallel(inputs)
-        criterion = nn.CrossEntropyLoss()
-        return criterion(rearrange(pred, "b n c -> (b n) c"), labels.flatten())
+    def forward(self, x: Tensor, mem: Tensor) -> Tensor:
+        return self.forward_parallel(x, mem)

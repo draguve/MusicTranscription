@@ -33,7 +33,7 @@ class RetnetEncoderDecoder(pl.LightningModule):
         self.d_model = d_model
         self.vocabSize = vocabSize
         self.dropout = dropout
-        self.d_ff = 512
+        self.d_ff = d_ff
         encoder_layer = RetNetDecoderLayer(
             d_model,
             nhead,
@@ -105,8 +105,14 @@ def test():
     datasetLocation = r"C:\Users\ritwi\Github\MusicTranscription\Trainsets\S_Tier_1695619803_mTokens400_mNoS5.hdf5"
     dataset, pipe = getDataPipe(datasetLocation, 2, batchFirst=True)
     model = RetnetEncoderDecoder(dataset.getVocabSize())
-    print(summary(model, ((10, 50, 512), (10, 50), (10, 300), (10, 300)),
-            dtypes=[torch.float, torch.bool, torch.long, torch.bool]))
+    print(
+        summary(
+            model,
+            ((10, 50, 512), (10, 50), (10, 300), (10, 300)),
+            dtypes=[torch.float, torch.bool, torch.long, torch.bool],
+            depth=7
+        )
+    )
     # print(str(model.parameters()))
     # itx = iter(pipe)
     # x = next(itx)
