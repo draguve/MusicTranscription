@@ -1,40 +1,72 @@
 from typing import Optional, Tuple, Union, Callable
 import torch
 import torch.nn.functional as F
-from einops import rearrange
+from einops import rearrange, einsum
 from torch import Tensor, nn
-from yet_another_retnet.retention import MultiScaleRetention, _theta_shift, retention_parallel, ActivationString, \
-    _get_activation_fn, _build_position_thetas, retention_recurrent, retention_chunkwise
+from yet_another_retnet.retention import _build_decay_gammas, _build_decay_mask, ActivationString, \
+    _get_activation_fn, _build_position_thetas
+
+from Externals.RetNet.src.xpos_relative_position import XPOS
 
 
-def get_sin_cos(q, thetas):
-    indices = torch.arange(q.size(2), device=q.device, dtype=q.dtype)
-    indices = rearrange(indices, "n -> () () n ()")
-    thetas = rearrange(thetas, "d -> () () () d")
-    angles = indices * thetas
-    sin = torch.sin(angles)
-    cos = torch.cos(angles)
-    return sin, cos
+def retention_parallel(
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        scale: Optional[float] = None,
+        decay_gammas: Optional[Tensor] = None,
+        need_weights: bool = False,
+) -> Tuple[Tensor, Optional[Tensor]]:
+    if decay_gammas is None:
+        decay_gammas = _build_decay_gammas(
+            num_heads=query.shape[1], device=query.device, dtype=query.dtype
+        )
+    decay_mask = _build_decay_mask(
+        query_length=query.shape[2],
+        key_length=key.shape[2],
+        decay_gammas=decay_gammas,
+        device=query.device,
+        dtype=query.dtype,
+    )
+
+    # einstein notation:
+    # - b: batch_size
+    # - h: num_heads
+    # - n / s: seq_length
+    # - d: hidden_dim
+
+    # if scale is None:
+    #     scale = key.size(-1) ** 0.5
+    # key = key / scale
+
+    similarity = einsum(query, key, "b h n d, b h s d -> b h n s")
+    similarity = similarity * rearrange(decay_mask, "h n s -> () h n s")
+    retention = einsum(similarity, value, "b h n s, b h s d -> b h n d")
+
+    if need_weights:
+        return retention, similarity
+    else:
+        return retention, None
 
 
 class MultiScaleCrossRetention(nn.Module):
     def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        relative_position: bool = True,
-        bias: bool = True,
-        batch_first: bool = True,
-        activation: Union[ActivationString, Callable[[Tensor], Tensor]] = "swish",
-        group_norm_eps: float = 1e-6,
-        device: Optional[Union[torch.device, str]] = None,
-        dtype: Optional[torch.dtype] = None,
-        # TODO???
-        # add_bias_kv=False,
-        # add_zero_attn=False,
-        # kdim=None,
-        # vdim=None,
+            self,
+            embed_dim: int,
+            num_heads: int,
+            dropout: float = 0.0,
+            relative_position: bool = True,
+            bias: bool = True,
+            batch_first: bool = True,
+            activation: Union[ActivationString, Callable[[Tensor], Tensor]] = "swish",
+            group_norm_eps: float = 1e-5,  # TODO check this?
+            device: Optional[Union[torch.device, str]] = None,
+            dtype: Optional[torch.dtype] = None,
+            # TODO???
+            # add_bias_kv=False,
+            # add_zero_attn=False,
+            # kdim=None,
+            # vdim=None,
     ):
         if not batch_first:
             raise NotImplementedError("batch_first=False is not yet supported")
@@ -72,7 +104,7 @@ class MultiScaleCrossRetention(nn.Module):
         )
         self.group_norm = nn.GroupNorm(
             num_groups=num_heads,
-            num_channels=num_heads,
+            num_channels=embed_dim,
             affine=False,
             eps=group_norm_eps,
             device=device,
@@ -86,15 +118,7 @@ class MultiScaleCrossRetention(nn.Module):
             embed_dim, embed_dim, bias=bias, device=device, dtype=dtype
         )
 
-        # 'thetas' parameter for updating the relative position embeddings.
-        thetas: Optional[Tensor] = None
-        if relative_position:
-            thetas = _build_position_thetas(
-                head_dim=head_dim, device=device, dtype=dtype
-            )
-        self.thetas: Optional[Tensor]
-        self.register_buffer("thetas", thetas)
-
+        self.xpos = XPOS(head_dim)
         self._reset_parameters()
 
     def _reset_parameters(self):
@@ -136,16 +160,16 @@ class MultiScaleCrossRetention(nn.Module):
 
         # Unfold 'd' dimension into 'h' separate retention heads.  Move the head
         # dimension to position 1 (makes matrix ops *much* faster).
-        q = rearrange(q, "b n (h d) -> b h n d", h=self.num_heads)
-        k = rearrange(k, "b n (h d) -> b h n d", h=self.num_heads)
+        q = rearrange(q, "b n (h d) -> (b h) n d", h=self.num_heads)
+        k = rearrange(k, "b n (h d) -> (b h) n d", h=self.num_heads)
         v = rearrange(v, "b n (h d) -> b h n d", h=self.num_heads)
 
         if self.relative_position:
-            assert self.thetas is not None
-            q_sin, q_cos = get_sin_cos(q, self.thetas)
-            k_sin, k_cos = get_sin_cos(k, self.thetas)
-            q = _theta_shift(q, q_sin, q_cos)
-            k = _theta_shift(k, k_sin, k_cos)
+            q = self.xpos(q)
+            k = self.xpos(k, downscale=True)
+
+        q = rearrange(q, "(b h) n d -> b h n d", h=self.num_heads)
+        k = rearrange(k, "(b h) n d -> b h n d", h=self.num_heads)
 
         # Apply retention then group norm.
         retention, weights = retention_parallel(q, k, v, need_weights=need_weights)
@@ -153,11 +177,11 @@ class MultiScaleCrossRetention(nn.Module):
         # we fold the sequence dimension into the batch dimension.  Otherwise,
         # normalization would be applied over the entire input sequence.
         batch_size = retention.size(0)
-        retention = rearrange(retention, "b h n d -> (b n) h d")
+        retention = rearrange(retention, "b h n d -> (b n) (h d)")
         retention = F.dropout(retention, p=self.dropout, training=self.training)
         retention = self.group_norm(retention)
         # Unfold 'n' from the batch dimension, and fold 'h' back into the embed dim.
-        retention = rearrange(retention, "(b n) h d -> b n (h d)", b=batch_size)
+        retention = rearrange(retention, "(b n) e -> b n e", b=batch_size)
 
         # NOTE: Unlike multihead attention, the retention paper applies a "swish"
         # gate to increase the non-linear capacity of the model.  (IMO this is likely
@@ -174,30 +198,30 @@ class MultiScaleCrossRetention(nn.Module):
         return retention, weights
 
     def forward_recurrent(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        seq_idx: int,
-        prev_state: Optional[Tensor],
+            self,
+            query: Tensor,
+            key: Tensor,
+            value: Tensor,
+            seq_idx: int,
+            prev_state: Optional[Tensor],
     ) -> Tuple[Tensor, Tensor]:
         raise NotImplementedError()
 
     def forward_chunkwise(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        start_idx: int,
-        prev_state: Optional[Tensor],
+            self,
+            query: Tensor,
+            key: Tensor,
+            value: Tensor,
+            start_idx: int,
+            prev_state: Optional[Tensor],
     ) -> Tuple[Tensor, Tensor]:
         raise NotImplementedError()
 
     def forward(
-        self,
-        query: Tensor,
-        key: Tensor,
-        value: Tensor,
-        need_weights: bool = False,
+            self,
+            query: Tensor,
+            key: Tensor,
+            value: Tensor,
+            need_weights: bool = False,
     ) -> Tuple[Tensor, Optional[Tensor]]:
         return self.forward_parallel(query, key, value, need_weights=need_weights)

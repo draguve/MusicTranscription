@@ -8,6 +8,7 @@ from torchinfo import summary
 
 from TModel.PositionalEncoding import PositionalEncoding
 from TModel.GuitarTokenEmbeddingModel import GuitarTokenEmbeddingModel
+from TModel.Retnet.RetNetEncoder import RetNetEncoderLayer, RetNetEncoder
 from TranscriptionDataset.TranscriptionDataset import getDataPipe
 from yet_another_retnet.retnet import RetNetDecoder, RetNetDecoderLayer
 from TModel.Retnet.RetnetCrossDecoder import RetNetCrossDecoder, RetNetCrossLayer
@@ -25,7 +26,7 @@ class RetnetEncoderDecoder(pl.LightningModule):
             dropout: float = 0.1,
             activation: Union[ActivationString, Callable[[Tensor], Tensor]] = "swish",
             normFirst: bool = True,
-            layer_norm_eps: float = 1e-6,
+            layer_norm_eps: float = 1e-5,
             embeddingCheckpoint=None
     ):
         super().__init__()
@@ -34,7 +35,7 @@ class RetnetEncoderDecoder(pl.LightningModule):
         self.vocabSize = vocabSize
         self.dropout = dropout
         self.d_ff = d_ff
-        encoder_layer = RetNetDecoderLayer(
+        encoder_layer = RetNetEncoderLayer(
             d_model,
             nhead,
             d_ff,
@@ -45,7 +46,7 @@ class RetnetEncoderDecoder(pl.LightningModule):
             # device=device,
             # dtype=dtype,
         )
-        self.encoder = RetNetDecoder(encoder_layer, num_layers)
+        self.encoder = RetNetEncoder(encoder_layer, num_layers)
         decoder_layer = RetNetCrossLayer(
             d_model,
             nhead,
@@ -97,7 +98,7 @@ class RetnetEncoderDecoder(pl.LightningModule):
 
     def configure_optimizers(self):
         # optimizer = torch.optim.Adam(self.transformer_model.parameters(), lr=0.001, betas=(0.9, 0.98), eps=1e-9)
-        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-5)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-6)
         return optimizer
 
 
