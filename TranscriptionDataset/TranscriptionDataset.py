@@ -59,18 +59,21 @@ def bucketBatcherSort(data):
     return sorted(data, key=lambda x: x[0].shape[0])
 
 
-def datasetCollateFn(all_data):
-    all_mels = pad_sequence([i[0] for i in all_data])
-    src_pad_mask = pad_sequence([i[1] for i in all_data], padding_value=True, batch_first=True)
-    all_tokens = pad_sequence([i[2] for i in all_data])
-    tgt_pad_mask = pad_sequence([i[3] for i in all_data], padding_value=True, batch_first=True)
-    src_mask = generate_square_subsequent_mask(all_mels.shape[0])
-    tgt_mask = generate_square_subsequent_mask(all_tokens.shape[0])
-    tokens_out = pad_sequence([i[4] for i in all_data], padding_value=0)
-    return all_mels, src_mask, src_pad_mask, all_tokens, tgt_mask, tgt_pad_mask, tokens_out
+def createCollateFn(batchFirst=False):
+    def datasetCollateFn(all_data):
+        all_mels = pad_sequence([i[0] for i in all_data], batch_first=batchFirst)
+        src_pad_mask = pad_sequence([i[1] for i in all_data], padding_value=True, batch_first=not batchFirst)
+        all_tokens = pad_sequence([i[2] for i in all_data], batch_first=batchFirst)
+        tgt_pad_mask = pad_sequence([i[3] for i in all_data], padding_value=True, batch_first=not batchFirst)
+        src_mask = generate_square_subsequent_mask(all_mels.shape[0])
+        tgt_mask = generate_square_subsequent_mask(all_tokens.shape[0])
+        tokens_out = pad_sequence([i[4] for i in all_data], padding_value=0,batch_first=batchFirst)
+        return all_mels, src_mask, src_pad_mask, all_tokens, tgt_mask, tgt_pad_mask, tokens_out
+
+    return datasetCollateFn
 
 
-def getDataPipe(datasetLocation, batchSize=10, prefetchSize=None, pinMemory=False):
+def getDataPipe(datasetLocation, batchSize=10, prefetchSize=None, pinMemory=False, batchFirst=False):
     dataset = TranscriptionDataset(datasetLocation, batchSize=batchSize)
     pipe = tdi.BucketBatcher(
         dataset,
@@ -78,7 +81,8 @@ def getDataPipe(datasetLocation, batchSize=10, prefetchSize=None, pinMemory=Fals
         sort_key=bucketBatcherSort,
         use_in_batch_shuffle=True,
     )
-    pipe = tdi.Collator(pipe, collate_fn=datasetCollateFn)
+    collateFn = createCollateFn(batchFirst)
+    pipe = tdi.Collator(pipe, collate_fn=collateFn)
     if prefetchSize is not None:
         pipe = tdi.Prefetcher(pipe, prefetchSize)
     if pinMemory:

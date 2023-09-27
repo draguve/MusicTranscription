@@ -1,0 +1,3 @@
+[submodule "Externals/yet-another-retnet"]
+	path = Externals/yet-another-retnet
+	url = https://github.com/fkodom/yet-another-retnet.git
