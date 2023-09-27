@@ -67,7 +67,7 @@ def createCollateFn(batchFirst=False):
         tgt_pad_mask = pad_sequence([i[3] for i in all_data], padding_value=True, batch_first=not batchFirst)
         src_mask = generate_square_subsequent_mask(all_mels.shape[0])
         tgt_mask = generate_square_subsequent_mask(all_tokens.shape[0])
-        tokens_out = pad_sequence([i[4] for i in all_data], padding_value=0,batch_first=batchFirst)
+        tokens_out = pad_sequence([i[4] for i in all_data], padding_value=0, batch_first=batchFirst)
         return all_mels, src_mask, src_pad_mask, all_tokens, tgt_mask, tgt_pad_mask, tokens_out
 
     return datasetCollateFn
@@ -100,6 +100,7 @@ def generate_square_subsequent_mask(sz: int, device='cpu') -> Tensor:
 def test():
     datasetLocation = "../Trainsets/S_Tier_1695428558_mTokens1000_mNoS60.hdf5"
     tokenizer = H5GuitarTokenizer(datasetLocation)
+    # print(tokenizer.encoder.decode(0))
     dataset, pipe = getDataPipe(datasetLocation, 10)
     train_dl = DataLoader(dataset=pipe, num_workers=0)
     for i in tqdm(train_dl, total=len(dataset)):

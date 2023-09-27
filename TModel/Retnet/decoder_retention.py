@@ -96,8 +96,8 @@ class MultiScaleDecoderRetention(nn.Module):
 
         # apply each individual retention mechanism to X
         Y = []
-        for i in range(self.heads):
-            Y.append(self.retentions[i](X, Mem))
+        for retention in self.retentions:
+            Y.append(retention(X, Mem))
 
         Y = torch.cat(Y, dim=2)
         Y_shape = Y.shape

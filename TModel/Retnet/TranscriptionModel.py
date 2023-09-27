@@ -1,16 +1,18 @@
 import torch
 from torch import optim, nn, utils, Tensor
 import lightning.pytorch as pl
+from torchinfo import summary
 from TModel.PositionalEncoding import PositionalEncoding
 from TModel.GuitarTokenEmbeddingModel import GuitarTokenEmbeddingModel
+from TModel.Retnet.RetNetLayer import RetNetEncoderLayer, RetnetEncoderLayers, RetNetDecoderLayer, RetnetDecoderLayers
 from TranscriptionDataset.TranscriptionDataset import getDataPipe
 from Externals.RetNet.src.retnet import RetNet
 from TModel.Retnet.Decoder import RetNetDecoder
-from Externals.RetNet.src.xpos_relative_position import XPOS
 
 
 class TranscriptionRetnetModel(pl.LightningModule):
-    def __init__(self, vocabSize, d_model=512, d_ff=2048, num_layers=6, heads=8, dropout=0.1, embeddingCheckpoint=None):
+    def __init__(self, vocabSize, d_model=512, d_ff=2048, num_layers=6, heads=8, dropout=0.1, embeddingCheckpoint=None,
+                 double_v_dim=False):
         super().__init__()
         # inputTransformation =
         self.num_layers = num_layers
@@ -19,10 +21,12 @@ class TranscriptionRetnetModel(pl.LightningModule):
         self.dropout = dropout
         self.d_ff = d_ff
         self.heads = heads
+        self.v_dim = self.d_model * 2 if double_v_dim else self.d_model
         # self.positionalEncoding = PositionalEncoding(emb_size=self.d_model, dropout=self.dropout)
-        self.x_pos = XPOS(self.d_model)
-        self.encoder = RetNet(self.num_layers, self.d_model, self.d_ff, self.heads, False)
-        self.decoder = RetNetDecoder(self.num_layers, self.d_model, self.d_ff, self.heads, False)
+        encoderLayer = RetNetEncoderLayer(d_model, d_ff, heads, double_v_dim)
+        self.encoder = RetnetEncoderLayers(encoderLayer, num_layers)
+        decoderLayer = RetNetDecoderLayer(d_model, d_ff, heads, double_v_dim)
+        self.decoder = RetnetDecoderLayers(decoderLayer, num_layers)
         if embeddingCheckpoint is None:
             self.tgt_embedding = nn.Embedding(self.vocabSize, d_model)
         else:
@@ -72,10 +76,12 @@ def test():
     datasetLocation = r"C:\Users\ritwi\Github\MusicTranscription\Trainsets\S_Tier_1695619803_mTokens400_mNoS5.hdf5"
     dataset, pipe = getDataPipe(datasetLocation, 2, batchFirst=True)
     model = TranscriptionRetnetModel(dataset.getVocabSize())
-    itx = iter(pipe)
-    x = next(itx)
-    test_loss = model.training_step(x, 10)
-    print(test_loss)
+    print(summary(model, ((10, 50, 512), (10, 50), (10, 300), (10, 300)),
+                  dtypes=[torch.float, torch.bool, torch.long, torch.bool]))
+    # itx = iter(pipe)
+    # x = next(itx)
+    # test_loss = model.training_step(x, 10)
+    # print(test_loss)
 
 
 if __name__ == '__main__':
