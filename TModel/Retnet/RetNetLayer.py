@@ -1,6 +1,6 @@
 from torch import nn
 from copy import deepcopy
-from Externals.RetNet.src.retention import MultiScaleRetention
+from TModel.Retnet.decoder_retention import MultiScaleRetention
 from TModel.Retnet.decoder_retention import MultiScaleDecoderRetention
 
 
@@ -10,7 +10,7 @@ class RetNetEncoderLayer(nn.Module):
         self.hidden_dim = hidden_dim
         self.ffn_size = ffn_size
         self.heads = heads
-        self.retention = MultiScaleRetention(hidden_dim, heads, double_v_dim)
+        self.retention = MultiScaleRetention(embed_dim=hidden_dim, num_heads=heads, dropout=0)
         self.ffn = nn.Sequential(
             nn.Linear(hidden_dim, ffn_size),
             nn.GELU(),
@@ -19,11 +19,15 @@ class RetNetEncoderLayer(nn.Module):
         self.layer_norms_1 = nn.LayerNorm(hidden_dim)
         self.layer_norms_2 = nn.LayerNorm(hidden_dim)
 
+    def retention_call(self, X):
+        X, _ = self.retention.forward_parallel(X, X, X)
+        return X
+
     def forward(self, X):
         """
         X: (batch_size, sequence_length, hidden_size)
         """
-        X = self.retention(self.layer_norms_1(X)) + X
+        X = self.retention_call(self.layer_norms_1(X)) + X
         X = self.ffn(self.layer_norms_2(X)) + X
         return X
 
@@ -34,8 +38,8 @@ class RetNetDecoderLayer(nn.Module):
         self.hidden_dim = hidden_dim
         self.ffn_size = ffn_size
         self.heads = heads
-        self.retention = MultiScaleRetention(hidden_dim, heads, double_v_dim)
-        self.cross_retention = MultiScaleDecoderRetention(hidden_dim, heads, double_v_dim)
+        self.retention = MultiScaleRetention(embed_dim=hidden_dim, num_heads=heads, dropout=0)
+        self.cross_retention = MultiScaleRetention(embed_dim=hidden_dim, num_heads=heads, dropout=0)
         self.ffn = nn.Sequential(
             nn.Linear(hidden_dim, ffn_size),
             nn.GELU(),
@@ -45,12 +49,20 @@ class RetNetDecoderLayer(nn.Module):
         self.layer_norms_2 = nn.LayerNorm(hidden_dim)
         self.layer_norms_3 = nn.LayerNorm(hidden_dim)
 
+    def retention_call(self, X):
+        X, _ = self.retention.forward_parallel(X, X, X)
+        return X
+
+    def cross_retention_call(self, X, Mem):
+        X, _ = self.cross_retention.forward_parallel(X, Mem, Mem)
+        return X
+
     def forward(self, X, mem):
         """
         X: (batch_size, sequence_length, hidden_size)
         """
-        X = self.retention(self.layer_norms_1(X)) + X
-        X = self.cross_retention(self.layer_norms_2(X), mem) + X
+        X = self.retention_call(self.layer_norms_1(X)) + X
+        X = self.cross_retention_call(self.layer_norms_2(X), mem) + X
         X = self.ffn(self.layer_norms_2(X)) + X
         return X
 

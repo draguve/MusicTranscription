@@ -75,7 +75,7 @@ class TranscriptionRetnetModel(pl.LightningModule):
 def test():
     datasetLocation = r"C:\Users\ritwi\Github\MusicTranscription\Trainsets\S_Tier_1695619803_mTokens400_mNoS5.hdf5"
     dataset, pipe = getDataPipe(datasetLocation, 2, batchFirst=True)
-    model = TranscriptionRetnetModel(dataset.getVocabSize())
+    model = TranscriptionRetnetModel(dataset.getVocabSize()).to("cuda")
     print(summary(model, ((10, 50, 512), (10, 50), (10, 300), (10, 300)),
                   dtypes=[torch.float, torch.bool, torch.long, torch.bool]))
     # itx = iter(pipe)
