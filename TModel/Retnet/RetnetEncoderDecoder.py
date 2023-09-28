@@ -98,7 +98,7 @@ class RetnetEncoderDecoder(pl.LightningModule):
 
     def configure_optimizers(self):
         # optimizer = torch.optim.Adam(self.transformer_model.parameters(), lr=0.001, betas=(0.9, 0.98), eps=1e-9)
-        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-6)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-5)
         return optimizer
 
 

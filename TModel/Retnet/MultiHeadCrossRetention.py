@@ -93,15 +93,9 @@ class MultiScaleCrossRetention(nn.Module):
             )
 
         # The q/k/v projection layers are the same as in vanilla MHA.
-        self.q_proj = nn.Linear(
-            embed_dim, embed_dim, bias=bias, device=device, dtype=dtype
-        )
-        self.k_proj = nn.Linear(
-            embed_dim, embed_dim, bias=bias, device=device, dtype=dtype
-        )
-        self.v_proj = nn.Linear(
-            embed_dim, embed_dim, bias=bias, device=device, dtype=dtype
-        )
+        self.W_Q = nn.Parameter(torch.randn(self.num_heads, embed_dim, head_dim) / embed_dim)
+        self.W_K = nn.Parameter(torch.randn(self.num_heads, embed_dim, head_dim) / embed_dim)
+        self.W_V = nn.Parameter(torch.randn(self.num_heads, embed_dim, head_dim) / embed_dim)
         self.group_norm = nn.GroupNorm(
             num_groups=num_heads,
             num_channels=embed_dim,
@@ -124,15 +118,15 @@ class MultiScaleCrossRetention(nn.Module):
     def _reset_parameters(self):
         # TODO: Double-check that we're following the same initialization as in
         # the paper.  This is a generic initialization for MHA linear layers.
-        nn.init.xavier_normal_(self.q_proj.weight)
-        if self.q_proj.bias is not None:
-            nn.init.constant_(self.q_proj.bias, 0)
-        nn.init.xavier_normal_(self.k_proj.weight)
-        if self.k_proj.bias is not None:
-            nn.init.constant_(self.k_proj.bias, 0)
-        nn.init.xavier_normal_(self.v_proj.weight)
-        if self.v_proj.bias is not None:
-            nn.init.constant_(self.v_proj.bias, 0)
+        # nn.init.xavier_normal_(self.q_proj.weight)
+        # if self.q_proj.bias is not None:
+        #     nn.init.constant_(self.q_proj.bias, 0)
+        # nn.init.xavier_normal_(self.k_proj.weight)
+        # if self.k_proj.bias is not None:
+        #     nn.init.constant_(self.k_proj.bias, 0)
+        # nn.init.xavier_normal_(self.v_proj.weight)
+        # if self.v_proj.bias is not None:
+        #     nn.init.constant_(self.v_proj.bias, 0)
         nn.init.xavier_normal_(self.out_proj.weight)
         if self.out_proj.bias is not None:
             nn.init.constant_(self.out_proj.bias, 0)
@@ -154,16 +148,12 @@ class MultiScaleCrossRetention(nn.Module):
         # d - embedding dimension
         #
         # Input shape: (b, n, d)
-        q: Tensor = self.q_proj(query)
-        k: Tensor = self.k_proj(key)
-        v: Tensor = self.v_proj(value)
+        q = einsum(query, self.W_Q, "b l d, n d h -> b n l h")
+        k = einsum(key, self.W_K, "b l d, n d h -> b n l h")
+        v = einsum(value, self.W_V, "b l d, n d v -> b n l v")
 
-        # Unfold 'd' dimension into 'h' separate retention heads.  Move the head
-        # dimension to position 1 (makes matrix ops *much* faster).
-        q = rearrange(q, "b n (h d) -> (b h) n d", h=self.num_heads)
-        k = rearrange(k, "b n (h d) -> (b h) n d", h=self.num_heads)
-        v = rearrange(v, "b n (h d) -> b h n d", h=self.num_heads)
-
+        q = rearrange(q,"b h n d -> (b h) n d")
+        k = rearrange(k,"b h n d -> (b h) n d")
         if self.relative_position:
             q = self.xpos(q)
             k = self.xpos(k, downscale=True)
