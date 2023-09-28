@@ -47,7 +47,7 @@ def _build_decay_mask(
     # Set the upper-triangular distances to infinity, so that only *past* keys
     # can affect the current query.  (Setting distance to infinity ensures that
     # the decay matrix is 0 for those positions, since x^(inf) = 0 when -1 < x < 1.
-    distance_mask = torch.ones_like(distance, dtype=torch.bool).triu_(diagonal=1)
+    distance_mask = torch.ones_like(distance, dtype=torch.bool, device=device).triu_(diagonal=1)
     distance = distance.masked_fill(distance_mask, float("inf"))
 
     distance = rearrange(distance, "n s -> () n s")
@@ -77,12 +77,11 @@ class MultiScaleDecoderRetention(nn.Module):
         self.W_K = nn.Parameter(torch.randn(self.heads, hidden_size, self.head_size) / hidden_size)
         self.W_V = nn.Parameter(torch.randn(self.heads, hidden_size, self.head_v_dim) / hidden_size)
 
-        self.gammas = _build_decay_gammas(self.heads, self.W_Q.device, self.W_Q.dtype)
+        self.gammas = nn.Parameter(_build_decay_gammas(self.heads, self.W_Q.device, self.W_Q.dtype),requires_grad=False)
 
         self.W_G = nn.Parameter(torch.randn(hidden_size, self.v_dim) / hidden_size)
         self.W_O = nn.Parameter(torch.randn(self.v_dim, hidden_size) / hidden_size)
         self.group_norm = nn.GroupNorm(heads, self.v_dim)
-
 
     def forward(self, X, Mem):
         """
@@ -92,16 +91,9 @@ class MultiScaleDecoderRetention(nn.Module):
         # b=batch l=sq_len d=hiddendim n=n-head h=headdim v=vdim
         batch, sq_len, _ = X.shape
         _, key_len, _ = Mem.shape
-        q_proj = einsum(X, self.W_Q, "b l d, n d h -> b n l h")  # checked this multiply
+        q_proj = einsum(X, self.W_Q, "b l d, n d h -> b n l h")
         k_proj = einsum(Mem, self.W_K, "b l d, n d h -> b n l h")
         v_proj = einsum(Mem, self.W_V, "b l d, n d v -> b n l v")
-
-        # to check the multiply up top
-        # Q = []
-        # for i in range(self.heads):
-        #     Q.append(X @ self.W_Q[i, :, :])
-        # Q = torch.stack(Q)
-        # torch.all(rearrange(Q,"n b l h -> b n l h") == einsum(X, self.W_Q, "b l d, n d h -> b n l h"))
 
         q_proj = rearrange(q_proj, "b n l h -> (b n) l h")
         k_proj = rearrange(k_proj, "b n l h -> (b n) l h")
@@ -127,7 +119,7 @@ class MultiScaleDecoderRetention(nn.Module):
 
 def test():
     X = torch.rand((2, 30, 512), dtype=torch.float)
-    Y = torch.rand((2,40,512),dtype=torch.float)
+    Y = torch.rand((2, 40, 512), dtype=torch.float)
     msdr = MultiScaleDecoderRetention(512, 8, False)
     msdr.forward(X, Y)
 

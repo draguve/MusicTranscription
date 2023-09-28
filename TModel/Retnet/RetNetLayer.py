@@ -10,7 +10,7 @@ class RetNetEncoderLayer(nn.Module):
         self.hidden_dim = hidden_dim
         self.ffn_size = ffn_size
         self.heads = heads
-        self.retention = MultiScaleRetention(hidden_dim, heads, double_v_dim)
+        self.retention = MultiScaleDecoderRetention(hidden_dim, heads, double_v_dim)
         self.ffn = nn.Sequential(
             nn.Linear(hidden_dim, ffn_size),
             nn.GELU(),
@@ -23,7 +23,11 @@ class RetNetEncoderLayer(nn.Module):
         """
         X: (batch_size, sequence_length, hidden_size)
         """
-        X = self.retention(self.layer_norms_1(X)) + X
+
+        def _retention(rInput):
+            return self.retention(rInput, rInput)
+
+        X = _retention(self.layer_norms_1(X)) + X
         X = self.ffn(self.layer_norms_2(X)) + X
         return X
 
@@ -34,7 +38,7 @@ class RetNetDecoderLayer(nn.Module):
         self.hidden_dim = hidden_dim
         self.ffn_size = ffn_size
         self.heads = heads
-        self.retention = MultiScaleRetention(hidden_dim, heads, double_v_dim)
+        self.retention = MultiScaleDecoderRetention(hidden_dim, heads, double_v_dim)
         self.cross_retention = MultiScaleDecoderRetention(hidden_dim, heads, double_v_dim)
         self.ffn = nn.Sequential(
             nn.Linear(hidden_dim, ffn_size),
@@ -49,7 +53,9 @@ class RetNetDecoderLayer(nn.Module):
         """
         X: (batch_size, sequence_length, hidden_size)
         """
-        X = self.retention(self.layer_norms_1(X)) + X
+        def _retention(rInput):
+            return self.retention(rInput, rInput)
+        X = _retention(self.layer_norms_1(X)) + X
         X = self.cross_retention(self.layer_norms_2(X), mem) + X
         X = self.ffn(self.layer_norms_2(X)) + X
         return X
