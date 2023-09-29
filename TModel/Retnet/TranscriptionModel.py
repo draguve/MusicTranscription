@@ -1,4 +1,7 @@
+import importlib
+
 import torch
+from lightning.pytorch.strategies import DeepSpeedStrategy
 from torch import optim, nn, utils, Tensor
 import lightning.pytorch as pl
 from torchinfo import summary
@@ -6,14 +9,26 @@ from TModel.PositionalEncoding import PositionalEncoding
 from TModel.GuitarTokenEmbeddingModel import GuitarTokenEmbeddingModel
 from TModel.Retnet.RetNetLayer import RetNetEncoderLayer, RetnetEncoderLayers, RetNetDecoderLayer, RetnetDecoderLayers
 from TranscriptionDataset.TranscriptionDataset import getDataPipe
+DEEPSPEED_ENABLED = False
+if importlib.util.find_spec('deepspeed'):
+    import deepspeed
+    from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
+    DEEPSPEED_ENABLED = True
+
 from Externals.RetNet.src.retnet import RetNet
 from TModel.Retnet.Decoder import RetNetDecoder
 
 
 class TranscriptionRetnetModel(pl.LightningModule):
     def __init__(self, vocabSize, d_model=512, d_ff=2048, num_layers=6, heads=8, dropout=0.1, embeddingCheckpoint=None,
-                 double_v_dim=False):
+                 double_v_dim=False,lr_init= 1e-5,betas= (0.9, 0.999),eps= 1e-8,weight_decay= 1e-2,):
         super().__init__()
+
+        self.lr_init = lr_init
+        self.betas = betas
+        self.eps = eps
+        self.weight_decay = weight_decay
+
         # inputTransformation =
         self.num_layers = num_layers
         self.d_model = d_model
@@ -68,8 +83,21 @@ class TranscriptionRetnetModel(pl.LightningModule):
 
     def configure_optimizers(self):
         # optimizer = torch.optim.Adam(self.transformer_model.parameters(), lr=0.001, betas=(0.9, 0.98), eps=1e-9)
-        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-5)
-        return optimizer
+        if DEEPSPEED_ENABLED:
+            if self.deepspeed_offload:
+                return DeepSpeedCPUAdam(self.parameters(), lr=self.lr_init, betas=self.betas, eps=self.eps,
+                                        bias_correction=True, adamw_mode=True, weight_decay=self.weight_decay, amsgrad=False)
+            return FusedAdam(self.parameters(), lr=self.lr_init, betas=self.betas, eps=self.eps,
+                             bias_correction=True, adam_w_mode=True, weight_decay=self.weight_decay, amsgrad=False)
+        return torch.optim.AdamW(self.parameters(),lr=self.lr_init, betas=self.betas, eps=self.eps,weight_decay=self.weight_decay)
+
+    @property
+    def deepspeed_offload(self) -> bool:
+        strategy = self.trainer.strategy
+        if isinstance(strategy, DeepSpeedStrategy):
+            cfg = strategy.config["zero_optimization"]
+            return cfg.get("offload_optimizer") or cfg.get("offload_param")
+        return False
 
 
 def test():
