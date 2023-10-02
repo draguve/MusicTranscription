@@ -5,8 +5,8 @@ from Tokenizer import GuitarTokenizer
 
 class H5GuitarTokenizer(GuitarTokenizer):
     def __init__(self, datasetFile):
-        self.h5file = h5py.File(datasetFile, "r")
-        meta = self.h5file.get("Meta").attrs
+        h5file = h5py.File(datasetFile, "r")
+        meta = h5file.get("Meta").attrs
         super().__init__(
             maxNumberOfSeconds=meta["maxNumberOfSeconds"],
             timeStepsPerSecond=meta["timeStepsPerSecond"],

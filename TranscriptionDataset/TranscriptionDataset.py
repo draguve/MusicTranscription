@@ -44,12 +44,12 @@ class TranscriptionDataset(torchdata.datapipes.iter.IterDataPipe):
             sectionGroup = h5file[f"/Songs/{self.keys[key]}"]
             mel = torch.from_numpy(sectionGroup["mel"][...])
             mel = torch.cat((mel, torch.full((1, mel.shape[1]), -1.0, dtype=mel.dtype)))
-            src_pad_mask = torch.full((mel.shape[0],), False, dtype=torch.bool)
+            # src_pad_mask = torch.full((mel.shape[0],), False, dtype=torch.bool)
             tokens = torch.from_numpy(sectionGroup["tokens"][...]).long()
             tokens_in = tokens[:-1]
             tokens_out = tokens[1:]
-            tgt_pad_mask = torch.full((tokens_in.shape[0],), False, dtype=torch.bool)
-            yield mel, src_pad_mask, tokens_in, tgt_pad_mask, tokens_out
+            # tgt_pad_mask = torch.full((tokens_in.shape[0],), False, dtype=torch.bool)
+            yield mel, tokens_in, tokens_out
 
     def __len__(self):
         return math.ceil(self.lengthOfDataset / self.batchSize) + 1
@@ -61,14 +61,15 @@ def bucketBatcherSort(data):
 
 def createCollateFn(batchFirst=False):
     def datasetCollateFn(all_data):
+        lengths = np.array([len(i[1]) for i in all_data])
         all_mels = pad_sequence([i[0] for i in all_data], batch_first=batchFirst)
-        src_pad_mask = pad_sequence([i[1] for i in all_data], padding_value=True, batch_first=not batchFirst)
-        all_tokens = pad_sequence([i[2] for i in all_data], batch_first=batchFirst)
-        tgt_pad_mask = pad_sequence([i[3] for i in all_data], padding_value=True, batch_first=not batchFirst)
-        src_mask = generate_square_subsequent_mask(all_mels.shape[0])
-        tgt_mask = generate_square_subsequent_mask(all_tokens.shape[0])
-        tokens_out = pad_sequence([i[4] for i in all_data], padding_value=0, batch_first=batchFirst)
-        return all_mels, src_mask, src_pad_mask, all_tokens, tgt_mask, tgt_pad_mask, tokens_out
+        # src_pad_mask = pad_sequence([i[1] for i in all_data], padding_value=True, batch_first=not batchFirst)
+        tokens_in = pad_sequence([i[1] for i in all_data], batch_first=batchFirst)
+        # tgt_pad_mask = pad_sequence([i[3] for i in all_data], padding_value=True, batch_first=not batchFirst)
+        # src_mask = generate_square_subsequent_mask(all_mels.shape[0])
+        # tgt_mask = generate_square_subsequent_mask(all_tokens.shape[0])
+        tokens_out = pad_sequence([i[2] for i in all_data], padding_value=0, batch_first=batchFirst)
+        return all_mels, tokens_in, tokens_out, lengths
 
     return datasetCollateFn
 
