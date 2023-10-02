@@ -208,6 +208,12 @@ class GuitarTokenizer:
     def numberOfTokens(self) -> int:
         return self.encoder.numberOfTokens
 
+    def encode(self, *args, **kwargs):
+        return self.encoder.encode(*args, **kwargs)
+
+    def decode(self, *args, **kwargs):
+        return self.encoder.decode(*args, **kwargs)
+
     def processAndAddNote(self, sortedEvents, n, arrangement):
         note: dict = n
         noteTime = float(note["time"])
@@ -357,6 +363,7 @@ class GuitarTokenizer:
                 sections.append(this_section)
                 startTime = eventTime
                 startSpectrogramIndex = startSpectrogramIndex + numberOfFrames
+                lastArrangement = None
                 tokens = [self.encoder.encode(*createStartOfSeqEvent())]
                 # add open notes to the new section
                 for arrangementKey in loaded_files.keys():
